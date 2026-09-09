@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { toTableRows, type StockLedger, type StockOption, type TableRow } from "./ledger";
+import { pricePrecision, toTableRows, type StockLedger, type StockOption, type TableRow } from "./ledger";
 import { searchStocks } from "./stockApi";
 import "./App.css";
 
@@ -43,7 +43,7 @@ const UP_STEPS = Array.from({ length: 10 }, (_, index) => index + 1);
 const DOWN_STEPS = Array.from({ length: 10 }, (_, index) => -(index + 1));
 const HOVER_POPUP_DELAY_MS = 500;
 
-function PriceCell({ price }: { price: number | null | undefined }) {
+function PriceCell({ price, code }: { price: number | null | undefined; code: string }) {
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<number | null>(null);
 
@@ -69,9 +69,10 @@ function PriceCell({ price }: { price: number | null | undefined }) {
   if (price == null) {
     return <td></td>;
   }
+  const precision = pricePrecision(code);
   return (
     <td className="price-cell" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
-      {price.toFixed(2)}
+      {price.toFixed(precision)}
       {visible && (
         <div className="price-popup" role="tooltip">
           <table>
@@ -85,7 +86,7 @@ function PriceCell({ price }: { price: number | null | undefined }) {
             <tbody>
               <tr>
                 {UP_STEPS.map((pct) => (
-                  <td key={pct}>{(price * (1 + pct / 100)).toFixed(2)}</td>
+                  <td key={pct}>{(price * (1 + pct / 100)).toFixed(precision)}</td>
                 ))}
               </tr>
             </tbody>
@@ -101,7 +102,7 @@ function PriceCell({ price }: { price: number | null | undefined }) {
             <tbody>
               <tr>
                 {DOWN_STEPS.map((pct) => (
-                  <td key={pct}>{(price * (1 + pct / 100)).toFixed(2)}</td>
+                  <td key={pct}>{(price * (1 + pct / 100)).toFixed(precision)}</td>
                 ))}
               </tr>
             </tbody>
@@ -341,9 +342,9 @@ function App() {
                   )}
                 </td>
                 <td>{row.quantity ?? ""}</td>
-                <PriceCell price={row.buyPrice} />
+                <PriceCell price={row.buyPrice} code={row.code} />
                 <td>{row.buyDate ?? ""}</td>
-                <PriceCell price={row.sellPrice} />
+                <PriceCell price={row.sellPrice} code={row.code} />
                 <td>{row.sellDate ?? ""}</td>
                 <td className="row-actions">
                   <button

@@ -33,6 +33,17 @@ export interface TableRow {
   note?: string;
 }
 
+// Shanghai ETF/LOF codes use the 50/51/56/58 prefixes; Shenzhen ETF/LOF codes
+// use the 15/16/18 prefixes. These funds are conventionally quoted with three
+// decimal places instead of the two used for ordinary A-share stocks.
+export function isEtfOrLofCode(code: string): boolean {
+  return /^SH(50|51|56|58)\d+$/.test(code) || /^SZ(15|16|18)\d+$/.test(code);
+}
+
+export function pricePrecision(code: string): number {
+  return isEtfOrLofCode(code) ? 3 : 2;
+}
+
 export function toTableRows(ledgers: StockLedger[]): TableRow[] {
   return ledgers
     .flatMap((ledger) =>

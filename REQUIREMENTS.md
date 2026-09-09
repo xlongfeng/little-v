@@ -81,6 +81,7 @@ The stock `name` and `code` are stored once per file, not repeated on each trans
 - Stock name and code are required; every other field is optional.
 - Quantity, when provided, must be a finite positive whole number that is a multiple of 100.
 - Each price, when present, must be a finite positive value; each date, when present, must use `YYYY-MM-DD`. Prices and dates are validated independently of one another.
+- Prices are rounded before being saved: ordinary A-share stocks are stored with 2 decimal places, while ETFs and LOFs are stored with 3 decimal places.
 - Transactions can be edited in place by double-clicking their row, or removed entirely via the trading record table's row **Delete transaction** icon.
 
 ## 6. User Interface
@@ -122,14 +123,14 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | --- | --- |
 | Name | Stock name |
 | Quantity | Trade quantity |
-| Buy Price | Buy price, or blank when no buy side is present |
+| Buy Price | Buy price, or blank when no buy side is present; shown with 2 decimal places for stocks and 3 decimal places for ETFs/LOFs |
 | Buy Date | Buy date, or blank when no buy side is present |
-| Sell Price | Sell price, or blank when no sell side is present |
+| Sell Price | Sell price, or blank when no sell side is present; shown with 2 decimal places for stocks and 3 decimal places for ETFs/LOFs |
 | Sell Date | Sell date, or blank when no sell side is present |
 | Actions | Header labeled **Actions**; each cell holds the row's **Delete transaction** icon button |
 
 - When a transaction has a note, a small comment indicator (message icon) is appended after the stock name in the Name cell; hovering over the indicator shows the full note text in a tooltip popup. Transactions without a note show no indicator.
-- Hovering over a populated Buy Price or Sell Price cell for a short delay (matching the note comment indicator's deferred tooltip feel) shows a floating popup with two horizontal tables: an upper table with one column per +1% through +10% step, and a lower table with one column per -1% through -10% step, each with a header row of percentage changes above a row of the corresponding computed prices. The popup is centered under the price cell and disappears immediately when the cursor leaves. Empty price cells show no popup.
+- Hovering over a populated Buy Price or Sell Price cell for a short delay (matching the note comment indicator's deferred tooltip feel) shows a floating popup with two horizontal tables: an upper table with one column per +1% through +10% step, and a lower table with one column per -1% through -10% step, each with a header row of percentage changes above a row of the corresponding computed prices (using the same 2-or-3-decimal precision as the price cell). The popup is centered under the price cell and disappears immediately when the cursor leaves. Empty price cells show no popup.
 - Closed transactions (quantity, buy price/date, and sell price/date all present) are rendered with a gray font color to visually distinguish them from open rows.
 - Double-clicking a row opens an **Edit transaction** dialog (see §7) pre-filled with that row's current values, allowing the quantity, buy/sell price and date fields, and note to be changed and saved back to the same transaction.
 - Each row ends with a **Delete transaction** icon button (visible on hover). Clicking it opens a confirmation dialog styled like the Create Transaction dialog, naming the affected stock; confirming permanently removes that transaction from its stock's ledger file and refreshes the table, while Cancel or closing the dialog leaves the transaction untouched. A deletion error is shown inside the confirmation dialog without closing it.

@@ -104,6 +104,33 @@ fn timestamp() -> String {
     Utc::now().to_rfc3339()
 }
 
+// Shanghai ETF/LOF codes use the 50/51/56/58 prefixes; Shenzhen ETF/LOF codes
+// use the 15/16/18 prefixes. These funds are conventionally quoted with three
+// decimal places instead of the two used for ordinary A-share stocks, so
+// their prices are preserved with more precision when saved.
+fn is_etf_or_lof_code(code: &str) -> bool {
+    let code = code.trim().to_uppercase();
+    if let Some(rest) = code.strip_prefix("SH") {
+        return ["50", "51", "56", "58"]
+            .iter()
+            .any(|prefix| rest.starts_with(prefix));
+    }
+    if let Some(rest) = code.strip_prefix("SZ") {
+        return ["15", "16", "18"]
+            .iter()
+            .any(|prefix| rest.starts_with(prefix));
+    }
+    false
+}
+
+fn round_price(price: Option<f64>, code: &str) -> Option<f64> {
+    price.map(|value| {
+        let decimals = if is_etf_or_lof_code(code) { 3 } else { 2 };
+        let factor = 10f64.powi(decimals);
+        (value * factor).round() / factor
+    })
+}
+
 fn valid_date(date: &str) -> bool {
     date.len() == 10
         && date.as_bytes().get(4) == Some(&b'-')
@@ -190,9 +217,9 @@ fn save_transaction_to(
         create_date: now.clone(),
         modify_date: now,
         quantity: request.quantity,
-        buy_price: request.buy_price,
+        buy_price: round_price(request.buy_price, &code),
         buy_date: request.buy_date,
-        sell_price: request.sell_price,
+        sell_price: round_price(request.sell_price, &code),
         sell_date: request.sell_date,
         note: request
             .note
@@ -277,9 +304,9 @@ fn update_transaction_in(
 
     transaction.modify_date = timestamp();
     transaction.quantity = request.quantity;
-    transaction.buy_price = request.buy_price;
+    transaction.buy_price = round_price(request.buy_price, &code);
     transaction.buy_date = request.buy_date;
-    transaction.sell_price = request.sell_price;
+    transaction.sell_price = round_price(request.sell_price, &code);
     transaction.sell_date = request.sell_date;
     transaction.note = request
         .note
@@ -495,6 +522,40 @@ mod tests {
     }
 
     #[test]
+    fn rounds_a_stock_price_to_two_decimal_places() {
+        let directory = tempdir().unwrap();
+        let transaction = save_transaction_to(
+            directory.path(),
+            CreateTransactionRequest {
+                code: "SH600000".into(),
+                buy_price: Some(10.5678),
+                sell_price: Some(12.006),
+                ..base_request()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(transaction.buy_price, Some(10.57));
+        assert_eq!(transaction.sell_price, Some(12.01));
+    }
+
+    #[test]
+    fn keeps_three_decimal_places_for_an_etf_price() {
+        let directory = tempdir().unwrap();
+        let transaction = save_transaction_to(
+            directory.path(),
+            CreateTransactionRequest {
+                code: "SH510300".into(),
+                buy_price: Some(3.45678),
+                ..base_request()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(transaction.buy_price, Some(3.457));
+    }
+
+    #[test]
     fn rejects_a_quantity_that_is_not_a_multiple_of_100() {
         let directory = tempdir().unwrap();
         let result = save_transaction_to(
@@ -629,6 +690,30 @@ mod tests {
         let ledger = load_ledgers_from(directory.path()).unwrap().pop().unwrap();
         assert_eq!(ledger.transactions.len(), 1);
         assert_eq!(ledger.transactions[0].quantity, Some(200));
+    }
+
+    #[test]
+    fn rounds_a_stock_price_to_two_decimal_places_when_updating() {
+        let directory = tempdir().unwrap();
+        let created = save_transaction_to(
+            directory.path(),
+            CreateTransactionRequest {
+                code: "SH600000".into(),
+                ..base_request()
+            },
+        )
+        .unwrap();
+
+        let updated = update_transaction_in(
+            directory.path(),
+            UpdateTransactionRequest {
+                buy_price: Some(10.5678),
+                ..base_update("SH600000", &created.uuid)
+            },
+        )
+        .unwrap();
+
+        assert_eq!(updated.buy_price, Some(10.57));
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toTableRows, type StockLedger } from "./ledger";
+import { pricePrecision, toTableRows, type StockLedger } from "./ledger";
 
 const ledger: StockLedger = {
   code: "SH600000",
@@ -61,5 +61,20 @@ describe("ledger projections", () => {
 
     const rows = toTableRows([ledger, otherLedger]);
     expect(rows[0].key).toBe("alpha-1");
+  });
+});
+
+describe("pricePrecision", () => {
+  it("uses 3 decimal places for Shanghai and Shenzhen ETF/LOF codes", () => {
+    expect(pricePrecision("SH510300")).toBe(3);
+    expect(pricePrecision("SZ159915")).toBe(3);
+    expect(pricePrecision("SH560000")).toBe(3);
+    expect(pricePrecision("SZ168000")).toBe(3);
+  });
+
+  it("uses 2 decimal places for ordinary A-share stock codes", () => {
+    expect(pricePrecision("SH600000")).toBe(2);
+    expect(pricePrecision("SZ000001")).toBe(2);
+    expect(pricePrecision("SZ300001")).toBe(2);
   });
 });

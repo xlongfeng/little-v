@@ -253,6 +253,44 @@ describe("App", () => {
     expect(screen.getByRole("row", { name: /Example Bank/ })).toBeInTheDocument();
   });
 
+  it("shows three decimal places for ETF and LOF prices, and two for ordinary stocks", async () => {
+    invoke.mockResolvedValue([
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [
+          {
+            uuid: "stock-buy",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            buyPrice: 10.5,
+            buyDate: "2026-09-01",
+          },
+        ],
+      },
+      {
+        code: "SH510300",
+        name: "Example ETF",
+        transactions: [
+          {
+            uuid: "etf-buy",
+            createDate: "2",
+            modifyDate: "2",
+            quantity: 100,
+            buyPrice: 3.456,
+            buyDate: "2026-09-02",
+          },
+        ],
+      },
+    ]);
+    render(<App />);
+    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+
+    expect(screen.getByText("10.50")).toBeInTheDocument();
+    expect(screen.getByText("3.456")).toBeInTheDocument();
+  });
+
   it("shows a fluctuation range popup after hovering a price cell for a moment", async () => {
     invoke.mockResolvedValue([
       {
