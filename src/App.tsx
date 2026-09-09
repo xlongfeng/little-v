@@ -477,6 +477,7 @@ function TransactionDialog({
     () => ledgers.map(({ code, name }) => ({ code, name })),
     [ledgers],
   );
+  const priceStep = 1 / 10 ** pricePrecision(form.stock?.code ?? "");
   const choices = searchResults ?? localStocks;
 
   useEffect(() => {
@@ -643,11 +644,11 @@ function TransactionDialog({
         {searchError && <p className="field-error" role="alert">{searchError}</p>}
         <label>Quantity<input type="number" min="0" step="100" inputMode="numeric" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value.split(".")[0] })} /></label>
         <div className="two-columns">
-          <label>Buy price<input type="number" min="0.01" step="any" value={form.buyPrice} onChange={(event) => setForm({ ...form, buyPrice: event.target.value })} /></label>
+          <label>Buy price<input type="number" min="0.01" step={priceStep} value={form.buyPrice} onChange={(event) => setForm({ ...form, buyPrice: event.target.value })} /></label>
           <label>Buy date<input type="date" className={form.buyDate ? undefined : "date-empty"} value={form.buyDate} onChange={(event) => setForm({ ...form, buyDate: event.target.value })} /></label>
         </div>
         <div className="two-columns">
-          <label>Sell price<input type="number" min="0.01" step="any" value={form.sellPrice} onChange={(event) => setForm({ ...form, sellPrice: event.target.value })} /></label>
+          <label>Sell price<input type="number" min="0.01" step={priceStep} value={form.sellPrice} onChange={(event) => setForm({ ...form, sellPrice: event.target.value })} /></label>
           <label>Sell date<input type="date" className={form.sellDate ? undefined : "date-empty"} value={form.sellDate} onChange={(event) => setForm({ ...form, sellDate: event.target.value })} /></label>
         </div>
         <label>Note<textarea rows={3} value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>

@@ -154,9 +154,9 @@ The **Create** action opens a modal dialog containing:
 | --- | --- |
 | Stock | Required unified combobox; see interaction below |
 | Quantity | Optional positive whole number; defaults to `1000`; increments/decrements by `100`; must be a multiple of `100`; decimal points cannot be entered |
-| Buy price | Optional positive number, independent of Buy date |
+| Buy price | Optional positive number, independent of Buy date; the spinbox step matches the selected stock's decimal precision (0.01 for stocks, 0.001 for ETFs/LOFs) |
 | Buy date | Optional date, empty by default, independent of Buy price; the unset `mm/dd/yyyy` placeholder is shown in gray |
-| Sell price | Optional positive number, independent of Sell date |
+| Sell price | Optional positive number, independent of Sell date; the spinbox step matches the selected stock's decimal precision (0.01 for stocks, 0.001 for ETFs/LOFs) |
 | Sell date | Optional date, empty by default, independent of Sell price; the unset `mm/dd/yyyy` placeholder is shown in gray |
 | Note | Optional free-text note, entered in a multi-line text area at the bottom of the dialog |
 

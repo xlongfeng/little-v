@@ -846,6 +846,29 @@ describe("App", () => {
     });
   });
 
+  it("sets the price spinbox step to match each stock's decimal precision", async () => {
+    const user = userEvent.setup();
+    invoke.mockResolvedValue([]);
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    searchStocks.mockResolvedValue([{ code: "SH600001", name: "New Bank" }]);
+    const stockInput = screen.getByRole("combobox", { name: "Stock" });
+    await user.type(stockInput, "New Bank{Enter}");
+    await user.click(screen.getByRole("button", { name: /New Bank/ }));
+
+    expect(screen.getByLabelText("Buy price")).toHaveAttribute("step", "0.01");
+    expect(screen.getByLabelText("Sell price")).toHaveAttribute("step", "0.01");
+
+    searchStocks.mockResolvedValue([{ code: "SH510300", name: "An ETF" }]);
+    await user.clear(stockInput);
+    await user.type(stockInput, "An ETF{Enter}");
+    await user.click(screen.getByRole("button", { name: /An ETF/ }));
+
+    expect(screen.getByLabelText("Buy price")).toHaveAttribute("step", "0.001");
+    expect(screen.getByLabelText("Sell price")).toHaveAttribute("step", "0.001");
+  });
+
   it("creates a transaction with a multiline note entered at the bottom of the form", async () => {
     const user = userEvent.setup();
     invoke.mockResolvedValue([]);
