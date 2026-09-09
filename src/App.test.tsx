@@ -253,6 +253,43 @@ describe("App", () => {
     expect(screen.getByRole("row", { name: /Example Bank/ })).toBeInTheDocument();
   });
 
+  it("shows a fluctuation range popup after hovering a price cell for a moment", async () => {
+    invoke.mockResolvedValue([
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [
+          {
+            uuid: "buy",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            buyPrice: 10,
+            buyDate: "2026-09-01",
+          },
+        ],
+      },
+    ]);
+    render(<App />);
+    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    fireEvent.mouseEnter(screen.getByText("10.00").closest("td") as HTMLElement);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    const popup = await screen.findByRole("tooltip");
+    expect(within(popup).getByText("+10%")).toBeInTheDocument();
+    expect(within(popup).getByText("11.00")).toBeInTheDocument();
+    expect(within(popup).getByText("-10%")).toBeInTheDocument();
+    expect(within(popup).getByText("9.00")).toBeInTheDocument();
+    expect(within(popup).getByText("+1%")).toBeInTheDocument();
+    expect(within(popup).getByText("-1%")).toBeInTheDocument();
+
+    fireEvent.mouseLeave(screen.getByText("10.00").closest("td") as HTMLElement);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
   it("renders closed transactions with a gray font color", async () => {
     invoke.mockResolvedValue([
       {

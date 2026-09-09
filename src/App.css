@@ -41,6 +41,24 @@ tbody tr:hover { background: #e8f0fb; }
 tbody tr.closed-row { color: #808080; }
 td small { display: block; color: #424242; margin-top: 2px; }
 .comment-indicator { display: inline-block; margin-left: 6px; color: #185abd; cursor: help; font-size: 13px; }
+.price-cell { position: relative; cursor: default; }
+.price-popup {
+  position: absolute;
+  z-index: 3;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  border: 1px solid #b3b3b3;
+  border-radius: 2px;
+  box-shadow: 0 4px 10px #00000026;
+  padding: 4px;
+  white-space: nowrap;
+}
+.price-popup table { font-size: 13px; margin: 0 auto; }
+.price-popup th, .price-popup td { padding: 2px 8px; border: none; }
+.price-popup table + table { margin-top: 4px; }
+.price-popup thead th { color: #424242; font-weight: 700; border-bottom: 1px solid #d9d9d9; }
 .empty-state { color: #424242; text-align: center; padding: 42px; }
 .error-banner { margin: 12px 24px; color: #a4262c; }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 1; display: grid; place-items: center; background: #21212180; }

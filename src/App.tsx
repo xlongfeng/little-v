@@ -39,6 +39,79 @@ function isRowClosed(row: { quantity?: number | null; buyPrice?: number | null; 
   );
 }
 
+const UP_STEPS = Array.from({ length: 10 }, (_, index) => index + 1);
+const DOWN_STEPS = Array.from({ length: 10 }, (_, index) => -(index + 1));
+const HOVER_POPUP_DELAY_MS = 500;
+
+function PriceCell({ price }: { price: number | null | undefined }) {
+  const [visible, setVisible] = useState(false);
+  const timerRef = useRef<number | null>(null);
+
+  function clearTimer() {
+    if (timerRef.current != null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }
+
+  function handleMouseEnter() {
+    clearTimer();
+    timerRef.current = window.setTimeout(() => setVisible(true), HOVER_POPUP_DELAY_MS);
+  }
+
+  function handleMouseLeave() {
+    clearTimer();
+    setVisible(false);
+  }
+
+  useEffect(() => clearTimer, []);
+
+  if (price == null) {
+    return <td></td>;
+  }
+  return (
+    <td className="price-cell" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+      {price.toFixed(2)}
+      {visible && (
+        <div className="price-popup" role="tooltip">
+          <table>
+            <thead>
+              <tr>
+                {UP_STEPS.map((pct) => (
+                  <th key={pct}>+{pct}%</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {UP_STEPS.map((pct) => (
+                  <td key={pct}>{(price * (1 + pct / 100)).toFixed(2)}</td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+          <table>
+            <thead>
+              <tr>
+                {DOWN_STEPS.map((pct) => (
+                  <th key={pct}>{pct}%</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {DOWN_STEPS.map((pct) => (
+                  <td key={pct}>{(price * (1 + pct / 100)).toFixed(2)}</td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </td>
+  );
+}
+
 interface TransactionForm {
   stock: StockOption | null;
   quantity: string;
@@ -268,9 +341,9 @@ function App() {
                   )}
                 </td>
                 <td>{row.quantity ?? ""}</td>
-                <td>{row.buyPrice?.toFixed(2) ?? ""}</td>
+                <PriceCell price={row.buyPrice} />
                 <td>{row.buyDate ?? ""}</td>
-                <td>{row.sellPrice?.toFixed(2) ?? ""}</td>
+                <PriceCell price={row.sellPrice} />
                 <td>{row.sellDate ?? ""}</td>
                 <td className="row-actions">
                   <button
