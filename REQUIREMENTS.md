@@ -96,6 +96,8 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | **Settings** | Shows a placeholder dialog for a future release |
 | **About** | Shows a short application description |
 
+At the far right of the menu bar, a **Total profit** indicator shows the sum of Profit (see §6.3 for the formula) across all currently visible rows (i.e. after applying the Filters).
+
 ### 6.2 Filters
 
 - Appears directly below the menu bar as a **Filters** toolbar.
@@ -127,11 +129,19 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | Buy Date | Buy date, or blank when no buy side is present |
 | Sell Price | Sell price, or blank when no sell side is present; shown with 2 decimal places for stocks and 3 decimal places for ETFs/LOFs |
 | Sell Date | Sell date, or blank when no sell side is present |
+| Profit | Net profit (see formula below) when quantity, buy price, and sell price are all present, regardless of whether dates are set; blank otherwise |
 | Actions | Header labeled **Actions**; each cell holds the row's **Delete transaction** icon button |
 
 - When a transaction has a note, a small comment indicator (message icon) is appended after the stock name in the Name cell; hovering over the indicator shows the full note text in a tooltip popup. Transactions without a note show no indicator.
 - Hovering over a populated Buy Price or Sell Price cell for a short delay (matching the note comment indicator's deferred tooltip feel) shows a floating popup with two horizontal tables: an upper table with one column per +1% through +10% step, and a lower table with one column per -1% through -10% step, each with a header row of percentage changes above a row of the corresponding computed prices (using the same 2-or-3-decimal precision as the price cell). The popup is centered under the price cell and disappears immediately when the cursor leaves. Empty price cells show no popup.
 - Closed transactions (quantity, buy price/date, and sell price/date all present) are rendered with a gray font color to visually distinguish them from open rows.
+- The Profit column shows the **net profit** whenever quantity, buy price, and sell price are all present (buy/sell dates are not required), computed as:
+  - `rate = 0.025%` (trade commission rate), `min_fee = 5` (minimum commission per side)
+  - `stamp_duty = 0.05%` for ordinary A-share stocks, or `0%` for ETFs/LOFs, applied only to the sell side
+  - `buy_fee = buy_price * quantity * rate`, `sell_fee = sell_price * quantity * rate`
+  - `stamp_fee = sell_price * quantity * stamp_duty`
+  - `gross_profit = (sell_price - buy_price) * quantity`
+  - `net_profit = gross_profit - max(min_fee, buy_fee) - max(min_fee, sell_fee) - stamp_fee`
 - Double-clicking a row opens an **Edit transaction** dialog (see §7) pre-filled with that row's current values, allowing the quantity, buy/sell price and date fields, and note to be changed and saved back to the same transaction.
 - Each row ends with a **Delete transaction** icon button (visible on hover). Clicking it opens a confirmation dialog styled like the Create Transaction dialog, naming the affected stock; confirming permanently removes that transaction from its stock's ledger file and refreshes the table, while Cancel or closing the dialog leaves the transaction untouched. A deletion error is shown inside the confirmation dialog without closing it.
 - When no records match, show a clear empty state that directs the user to create a transaction.

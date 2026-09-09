@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pricePrecision, toTableRows, type StockLedger } from "./ledger";
+import { computeNetProfit, pricePrecision, toTableRows, type StockLedger } from "./ledger";
 
 const ledger: StockLedger = {
   code: "SH600000",
@@ -76,5 +76,26 @@ describe("pricePrecision", () => {
     expect(pricePrecision("SH600000")).toBe(2);
     expect(pricePrecision("SZ000001")).toBe(2);
     expect(pricePrecision("SZ300001")).toBe(2);
+  });
+});
+
+describe("computeNetProfit", () => {
+  it("applies stamp duty and the $5 minimum commission for a stock trade", () => {
+    // buyFee = 10*100*0.00025 = 0.25 -> min fee 5; sellFee = 12*100*0.00025 = 0.3 -> min fee 5
+    // stampFee = 12*100*0.0005 = 0.6; gross = (12-10)*100 = 200
+    // net = 200 - 5 - 5 - 0.6 = 189.4
+    expect(computeNetProfit("SH600000", 100, 10, 12)).toBeCloseTo(189.4, 5);
+  });
+
+  it("charges no stamp duty for an ETF/LOF trade", () => {
+    // Same figures as above but no stamp duty: net = 200 - 5 - 5 - 0 = 190
+    expect(computeNetProfit("SH510300", 100, 10, 12)).toBeCloseTo(190, 5);
+  });
+
+  it("uses the rate-based fee once it exceeds the $5 minimum", () => {
+    // buyFee = 30*1000*0.00025 = 7.5; sellFee = 32*1000*0.00025 = 8
+    // stampFee = 32*1000*0.0005 = 16; gross = (32-30)*1000 = 2000
+    // net = 2000 - 7.5 - 8 - 16 = 1968.5
+    expect(computeNetProfit("SH600000", 1000, 30, 32)).toBeCloseTo(1968.5, 5);
   });
 });

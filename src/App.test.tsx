@@ -370,6 +370,107 @@ describe("App", () => {
     expect(closedRow).toHaveClass("closed-row");
   });
 
+  it("shows the calculated net profit for closed transactions and blank for open ones", async () => {
+    invoke.mockResolvedValue([
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [
+          {
+            uuid: "open-buy",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            buyPrice: 10,
+            buyDate: "2026-09-01",
+          },
+        ],
+      },
+      {
+        code: "SZ000001",
+        name: "Second Bank",
+        transactions: [
+          {
+            uuid: "closed",
+            createDate: "2",
+            modifyDate: "2",
+            quantity: 50,
+            buyPrice: 5,
+            buyDate: "2026-08-01",
+            sellPrice: 6,
+            sellDate: "2026-08-15",
+          },
+        ],
+      },
+      {
+        code: "SZ000002",
+        name: "Third Bank",
+        transactions: [
+          {
+            uuid: "no-dates",
+            createDate: "3",
+            modifyDate: "3",
+            quantity: 50,
+            buyPrice: 5,
+            sellPrice: 6,
+          },
+        ],
+      },
+    ]);
+    render(<App />);
+    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+
+    // buyFee = 5*50*0.00025 = 0.0625 -> min fee 5; sellFee = 6*50*0.00025 = 0.075 -> min fee 5
+    // stampFee = 6*50*0.0005 = 0.15; gross = (6-5)*50 = 50; net = 50 - 5 - 5 - 0.15 = 39.85
+    const profitCells = await screen.findAllByText("39.85");
+    expect(profitCells).toHaveLength(2);
+
+    const openRow = screen.getByText("Example Bank").closest("tr") as HTMLElement;
+    const cells = within(openRow).getAllByRole("cell");
+    expect(cells[6]).toHaveTextContent("");
+  });
+
+  it("shows the sum of visible rows' profit at the end of the menu bar", async () => {
+    invoke.mockResolvedValue([
+      {
+        code: "SZ000001",
+        name: "Second Bank",
+        transactions: [
+          {
+            uuid: "closed-1",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 50,
+            buyPrice: 5,
+            buyDate: "2026-08-01",
+            sellPrice: 6,
+            sellDate: "2026-08-15",
+          },
+        ],
+      },
+      {
+        code: "SZ000002",
+        name: "Third Bank",
+        transactions: [
+          {
+            uuid: "closed-2",
+            createDate: "2",
+            modifyDate: "2",
+            quantity: 50,
+            buyPrice: 5,
+            sellPrice: 6,
+          },
+        ],
+      },
+    ]);
+    render(<App />);
+    expect(await screen.findByText("Second Bank")).toBeInTheDocument();
+
+    // Each row nets 39.85, so the total across both visible rows is 79.70.
+    const menuBar = document.querySelector(".menu-bar") as HTMLElement;
+    expect(within(menuBar).getByText("Total profit: 79.70")).toBeInTheDocument();
+  });
+
   it("filters rows by open/closed status", async () => {
     invoke.mockResolvedValue([
       {

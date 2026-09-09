@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { pricePrecision, toTableRows, type StockLedger, type StockOption, type TableRow } from "./ledger";
+import { computeNetProfit, pricePrecision, toTableRows, type StockLedger, type StockOption, type TableRow } from "./ledger";
 import { searchStocks } from "./stockApi";
 import "./App.css";
 
@@ -37,6 +37,23 @@ function isRowClosed(row: { quantity?: number | null; buyPrice?: number | null; 
     row.sellPrice != null &&
     row.sellDate != null
   );
+}
+
+function netProfitFor(row: TableRow): number | null {
+  if (row.quantity == null || row.buyPrice == null || row.sellPrice == null) {
+    return null;
+  }
+  return computeNetProfit(row.code, row.quantity, row.buyPrice, row.sellPrice);
+}
+
+function formatNetProfit(row: TableRow): string {
+  const profit = netProfitFor(row);
+  return profit == null ? "" : profit.toFixed(2);
+}
+
+function formatTotalProfit(rows: TableRow[]): string {
+  const total = rows.reduce((sum, row) => sum + (netProfitFor(row) ?? 0), 0);
+  return total.toFixed(2);
 }
 
 const UP_STEPS = Array.from({ length: 10 }, (_, index) => index + 1);
@@ -258,6 +275,7 @@ function App() {
           <button type="button" onClick={() => setSettingsOpen(true)}>Settings</button>
           <button type="button" onClick={() => setAboutOpen(true)}>About</button>
         </nav>
+        <span className="total-profit">Total profit: {formatTotalProfit(rows)}</span>
       </header>
 
       <section className="filter-bar" aria-label="Record controls">
@@ -327,6 +345,7 @@ function App() {
               <th>Buy Date</th>
               <th>Sell Price</th>
               <th>Sell Date</th>
+              <th>Profit</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -346,6 +365,7 @@ function App() {
                 <td>{row.buyDate ?? ""}</td>
                 <PriceCell price={row.sellPrice} code={row.code} />
                 <td>{row.sellDate ?? ""}</td>
+                <td>{formatNetProfit(row)}</td>
                 <td className="row-actions">
                   <button
                     type="button"
@@ -364,7 +384,7 @@ function App() {
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={7} className="empty-state">No trading records yet. Use Create to add one.</td>
+                <td colSpan={8} className="empty-state">No trading records yet. Use Create to add one.</td>
               </tr>
             )}
           </tbody>
