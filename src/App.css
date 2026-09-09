@@ -88,6 +88,7 @@ button:disabled { cursor: not-allowed; opacity: .65; }
 .icon-button { border: 0; padding: 0 5px; font-size: 25px; line-height: 1; background: transparent; }
 .field-error { margin: -4px 0 0; color: #a4262c; font-size: 14px; }
 .info-dialog { min-height: 150px; }
+.version-tag { font-size: 0.6em; font-weight: normal; color: #666; margin-left: 6px; }
 .row-actions { width: 1%; white-space: nowrap; text-align: center; }
 .delete-row { font-size: 15px; color: #a4262c; opacity: 0; transition: opacity .1s ease; }
 tbody tr:hover .delete-row { opacity: 1; }

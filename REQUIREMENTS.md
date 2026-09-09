@@ -94,7 +94,7 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | --- | --- |
 | **Create** | Opens the transaction creation dialog |
 | **Settings** | Shows a placeholder dialog for a future release |
-| **About** | Shows a short application description |
+| **About** | Shows the dialog title **About Little V** followed by the app version (**Version `X.Y.Z`**) in a smaller font, and a short application description |
 
 At the far right of the menu bar, a **Total profit** indicator shows the sum of Profit (see §6.3 for the formula) across all currently visible rows (i.e. after applying the Filters).
 

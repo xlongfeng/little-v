@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { computeNetProfit, pricePrecision, toTableRows, type StockLedger, type StockOption, type TableRow } from "./ledger";
 import { searchStocks } from "./stockApi";
+import { version as appVersion } from "../package.json";
 import "./App.css";
 
 type StatusFilter = "all" | "open" | "closed";
@@ -448,8 +449,20 @@ function App() {
           </section>
         </div>
       )}
-      {aboutOpen && <InfoDialog title="About Little V" onClose={() => setAboutOpen(false)}>A local stock transaction ledger.</InfoDialog>}
-      {settingsOpen && <InfoDialog title="Settings" onClose={() => setSettingsOpen(false)}>Settings will be available in a future release.</InfoDialog>}
+      {aboutOpen && (
+        <InfoDialog
+          title={<>About Little V <span className="version-tag">Version {appVersion}</span></>}
+          ariaLabel={`About Little V Version ${appVersion}`}
+          onClose={() => setAboutOpen(false)}
+        >
+          <p>A local stock transaction ledger.</p>
+        </InfoDialog>
+      )}
+      {settingsOpen && (
+        <InfoDialog title="Settings" onClose={() => setSettingsOpen(false)}>
+          <p>Settings will be available in a future release.</p>
+        </InfoDialog>
+      )}
     </main>
   );
 }
@@ -659,8 +672,18 @@ function TransactionDialog({
   );
 }
 
-function InfoDialog({ title, children, onClose }: { title: string; children: string; onClose: () => void }) {
-  return <div className="dialog-backdrop" role="presentation"><section className="dialog info-dialog" role="dialog" aria-label={title}><div className="dialog-heading"><h2>{title}</h2><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></div><p>{children}</p></section></div>;
+function InfoDialog({
+  title,
+  ariaLabel,
+  children,
+  onClose,
+}: {
+  title: ReactNode;
+  ariaLabel?: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return <div className="dialog-backdrop" role="presentation"><section className="dialog info-dialog" role="dialog" aria-label={ariaLabel ?? (typeof title === "string" ? title : undefined)}><div className="dialog-heading"><h2>{title}</h2><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></div>{children}</section></div>;
 }
 
 export default App;

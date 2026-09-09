@@ -35,6 +35,20 @@ describe("App", () => {
     ]);
   });
 
+  it("shows the app version in a smaller font appended to the About dialog title", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "About" }));
+
+    const dialog = screen.getByRole("dialog");
+    const versionTag = within(dialog).getByText(/^Version \d+\.\d+\.\d+$/);
+    expect(versionTag).toHaveClass("version-tag");
+    expect(within(dialog).getByRole("heading")).toHaveTextContent(/^About Little V Version \d+\.\d+\.\d+$/);
+    expect(within(dialog).getByText("A local stock transaction ledger.")).toBeInTheDocument();
+  });
+
   it("filters the combined ledger table by checked stock names", async () => {
     const user = userEvent.setup();
     render(<App />);
