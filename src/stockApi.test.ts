@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const searchStocks = vi.fn();
+const getStocks = vi.fn();
 
 vi.mock("stock-api", () => ({
-  stocks: { auto: { searchStocks } },
+  stocks: { auto: { searchStocks, getStocks } },
 }));
 
 describe("searchStocks", () => {
@@ -44,5 +45,33 @@ describe("searchStocks", () => {
     const { searchStocks: search } = await import("./stockApi");
     expect(await search("  ")).toEqual([]);
     expect(searchStocks).not.toHaveBeenCalled();
+  });
+});
+
+describe("fetchQuotes", () => {
+  beforeEach(() => {
+    getStocks.mockReset();
+  });
+
+  it("returns a map of quotes keyed by code, deduplicating requested codes", async () => {
+    const { fetchQuotes } = await import("./stockApi");
+    getStocks.mockResolvedValue([
+      { code: "SH600000", name: "浦发银行", now: 10.5, low: 10, high: 11, percent: 0.05, yesterday: 10 },
+      { code: "SZ000001", name: "平安银行", now: 9.5, low: 9, high: 10, percent: -0.05, yesterday: 10 },
+    ]);
+
+    const result = await fetchQuotes(["SH600000", "SZ000001", "SH600000"]);
+
+    expect(getStocks).toHaveBeenCalledWith(["SH600000", "SZ000001"]);
+    expect(result).toEqual({
+      SH600000: { code: "SH600000", now: 10.5, yesterday: 10, percent: 0.05 },
+      SZ000001: { code: "SZ000001", now: 9.5, yesterday: 10, percent: -0.05 },
+    });
+  });
+
+  it("returns an empty map without calling the API for an empty code list", async () => {
+    const { fetchQuotes } = await import("./stockApi");
+    expect(await fetchQuotes([])).toEqual({});
+    expect(getStocks).not.toHaveBeenCalled();
   });
 });

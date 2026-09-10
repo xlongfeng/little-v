@@ -77,6 +77,8 @@ const en: Dictionary = {
   "settings.languageDefault": "System Default",
   "settings.languageEnglish": "English",
   "settings.languageZhCn": "简体中文",
+  "settings.prices": "Stock Quotes",
+  "settings.refreshInterval": "Refresh interval (seconds)",
 };
 
 const zh_cn: Dictionary = {
@@ -150,6 +152,8 @@ const zh_cn: Dictionary = {
   "settings.languageDefault": "系统默认",
   "settings.languageEnglish": "English",
   "settings.languageZhCn": "简体中文",
+  "settings.prices": "股票行情",
+  "settings.refreshInterval": "刷新间隔（秒）",
 };
 
 const translations: Record<Language, Dictionary> = { en, zh_cn };

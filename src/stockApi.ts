@@ -28,3 +28,33 @@ export async function searchStocks(query: string): Promise<StockOption[]> {
       name: stock.name,
     }));
 }
+
+export interface StockQuote {
+  code: string;
+  now: number;
+  yesterday: number;
+  percent: number;
+}
+
+// Fetches the latest quote for each requested code. Returns a map keyed by
+// code; codes that fail to resolve (e.g. transient API errors) are simply
+// omitted rather than failing the whole batch.
+export async function fetchQuotes(codes: string[]): Promise<Record<string, StockQuote>> {
+  const uniqueCodes = [...new Set(codes)];
+  if (!uniqueCodes.length) {
+    return {};
+  }
+
+  const results = await stocks.auto.getStocks(uniqueCodes);
+  const quotes: Record<string, StockQuote> = {};
+  for (const stock of results) {
+    quotes[stock.code] = {
+      code: stock.code,
+      now: stock.now,
+      yesterday: stock.yesterday,
+      percent: stock.percent,
+    };
+  }
+  return quotes;
+}
+

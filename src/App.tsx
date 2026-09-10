@@ -1,10 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { computeNetProfit, pricePrecision, toTableRows, type StockLedger, type StockOption, type TableRow } from "./ledger";
-import { searchStocks } from "./stockApi";
+import { searchStocks, type StockQuote } from "./stockApi";
 import { version as appVersion } from "../package.json";
 import { formatRecordCount, isLanguagePreference, useLanguage, type LanguagePreference } from "./i18n";
 import { LanguageProvider } from "./LanguageProvider";
+import { MIN_REFRESH_SECONDS, PriceFeedProvider, usePriceFeed } from "./PriceFeedProvider";
 import "./App.css";
 
 type StatusFilter = "all" | "open" | "closed";
@@ -63,7 +64,35 @@ const UP_STEPS = Array.from({ length: 10 }, (_, index) => index + 1);
 const DOWN_STEPS = Array.from({ length: 10 }, (_, index) => -(index + 1));
 const HOVER_POPUP_DELAY_MS = 500;
 
+function quoteChangeClass(quote: StockQuote, referencePrice: number): string {
+  if (quote.now > referencePrice) {
+    return "price-gain";
+  }
+  if (quote.now < referencePrice) {
+    return "price-loss";
+  }
+  return "";
+}
+
+function formatQuoteChange(quote: StockQuote, referencePrice: number, precision: number): string {
+  const change = quote.now - referencePrice;
+  const percent = referencePrice !== 0 ? (change / referencePrice) * 100 : 0;
+  const amount = `${change > 0 ? "+" : ""}${change.toFixed(precision)}`;
+  const percentText = `${percent > 0 ? "+" : ""}${percent.toFixed(2)}%`;
+  return `${amount} / ${percentText}`;
+}
+
+function CurrentQuoteRow({ quote, referencePrice, precision }: { quote: StockQuote; referencePrice: number; precision: number }) {
+  return (
+    <div className={`current-quote ${quoteChangeClass(quote, referencePrice)}`}>
+      <span className="current-quote-price">{quote.now.toFixed(precision)}</span>
+      <span className="current-quote-change">{formatQuoteChange(quote, referencePrice, precision)}</span>
+    </div>
+  );
+}
+
 function PriceCell({ price, code }: { price: number | null | undefined; code: string }) {
+  const { quotes } = usePriceFeed();
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<number | null>(null);
 
@@ -90,11 +119,13 @@ function PriceCell({ price, code }: { price: number | null | undefined; code: st
     return <td></td>;
   }
   const precision = pricePrecision(code);
+  const quote = quotes[code];
   return (
     <td className="price-cell" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
       {price.toFixed(precision)}
       {visible && (
         <div className="price-popup" role="tooltip">
+          {quote && <CurrentQuoteRow quote={quote} referencePrice={price} precision={precision} />}
           <table>
             <thead>
               <tr>
@@ -168,13 +199,16 @@ function formFromRow(row: TableRow): TransactionForm {
 function App() {
   return (
     <LanguageProvider>
-      <AppContent />
+      <PriceFeedProvider>
+        <AppContent />
+      </PriceFeedProvider>
     </LanguageProvider>
   );
 }
 
 function AppContent() {
   const { language, languagePreference, setLanguagePreference, t } = useLanguage();
+  const { setCodes, refreshIntervalSeconds, setRefreshIntervalSeconds } = usePriceFeed();
   const [ledgers, setLedgers] = useState<StockLedger[]>([]);
   const [excludedFilterNames, setExcludedFilterNames] = useState<string[]>([]);
   const [nameFilterOpen, setNameFilterOpen] = useState(false);
@@ -188,7 +222,12 @@ function AppContent() {
   const [deleteError, setDeleteError] = useState("");
   const [pendingDelete, setPendingDelete] = useState<{ code: string; uuid: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [refreshIntervalInput, setRefreshIntervalInput] = useState(String(refreshIntervalSeconds));
   const nameFilterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setRefreshIntervalInput(String(refreshIntervalSeconds));
+  }, [refreshIntervalSeconds]);
 
   const loadLedgers = async () => {
     try {
@@ -221,6 +260,12 @@ function AppContent() {
   }
 
   const allRows = useMemo(() => toTableRows(ledgers), [ledgers]);
+
+  useEffect(() => {
+    // Poll every code present in the ledger, regardless of active filters.
+    setCodes([...new Set(allRows.map((row) => row.code))]);
+  }, [allRows, setCodes]);
+
   const filterNames = useMemo(
     () => [...new Set(allRows.map((row) => row.name))].sort((left, right) => left.localeCompare(right)),
     [allRows],
@@ -501,6 +546,29 @@ function AppContent() {
                 <option value="en">{t("settings.languageEnglish")}</option>
                 <option value="zh_cn">{t("settings.languageZhCn")}</option>
               </select>
+            </div>
+          </fieldset>
+          <fieldset className="settings-group">
+            <legend>{t("settings.prices")}</legend>
+            <div className="settings-grid">
+              <label htmlFor="settings-refresh-interval">{t("settings.refreshInterval")}</label>
+              <input
+                id="settings-refresh-interval"
+                type="number"
+                min={MIN_REFRESH_SECONDS}
+                step={1}
+                aria-label={t("settings.refreshInterval")}
+                value={refreshIntervalInput}
+                onChange={(event) => setRefreshIntervalInput(event.target.value)}
+                onBlur={() => {
+                  const parsed = Number(refreshIntervalInput);
+                  if (Number.isFinite(parsed) && parsed >= MIN_REFRESH_SECONDS) {
+                    setRefreshIntervalSeconds(Math.round(parsed));
+                  } else {
+                    setRefreshIntervalInput(String(refreshIntervalSeconds));
+                  }
+                }}
+              />
             </div>
           </fieldset>
         </InfoDialog>

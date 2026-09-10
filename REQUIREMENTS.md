@@ -93,7 +93,7 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | Menu item | Behavior |
 | --- | --- |
 | **Create** | Opens the transaction creation dialog |
-| **Settings** | Shows a **Language** selector (English / 简体中文) |
+| **Settings** | Shows a **General** group with a **Language** selector (English / 简体中文 / System Default) and a **Stock Quotes** group with a **Refresh interval (seconds)** control |
 | **About** | Shows the dialog title **About Little V** followed by the app version (**Version `X.Y.Z`**) in a smaller font, and a short application description |
 
 At the far right of the menu bar, a **Total profit** indicator shows the sum of Profit (see §6.3 for the formula) across all currently visible rows (i.e. after applying the Filters).
@@ -104,6 +104,14 @@ At the far right of the menu bar, a **Total profit** indicator shows the sum of 
 - On first launch, the language preference is **Default**, which follows the OS/browser language (`navigator.language`): any locale starting with `zh` resolves to Simplified Chinese, everything else resolves to English.
 - The **Settings** dialog's **Language** dropdown offers **System Default**, **English**, and **简体中文**; choosing English or Chinese explicitly overrides the OS language, while choosing System Default clears the override and resumes following the OS language. The entire UI (menu, filters, table headers, dialogs, validation messages) updates immediately on change.
 - An explicit language choice is persisted in local storage (`littlev-language`) and takes precedence over the OS default on subsequent launches; selecting Default removes the stored override.
+
+### 6.1.2 Live price refresh
+
+- A background task periodically fetches the current market quote (current price, previous close, and change rate) for every stock code present in the ledger, independent of the active Names/Status/Period filters.
+- The refresh interval defaults to **3 seconds** and is configurable in **Settings → Stock Quotes → Refresh interval (seconds)** (minimum 1 second); the chosen interval is persisted in local storage (`littlev-price-refresh-seconds`).
+- Polling is skipped while the application window is not visible (e.g. minimized) and resumes immediately, refreshing right away, once the window becomes visible again.
+- A quote that fails to load (e.g. a transient network error) leaves the previously fetched quote in place rather than clearing it or interrupting the polling loop.
+- The latest quotes are held in memory only and are not persisted to disk.
 
 ### 6.2 Filters
 
@@ -140,7 +148,7 @@ At the far right of the menu bar, a **Total profit** indicator shows the sum of 
 | Actions | Header labeled **Actions**; each cell holds the row's **Delete transaction** icon button |
 
 - When a transaction has a note, a small comment indicator (message icon) is appended after the stock name in the Name cell; hovering over the indicator shows the full note text in a tooltip popup. Transactions without a note show no indicator.
-- Hovering over a populated Buy Price or Sell Price cell for a short delay (matching the note comment indicator's deferred tooltip feel) shows a floating popup with two horizontal tables: an upper table with one column per +1% through +10% step, and a lower table with one column per -1% through -10% step, each with a header row of percentage changes above a row of the corresponding computed prices (using the same 2-or-3-decimal precision as the price cell). The popup is centered under the price cell and disappears immediately when the cursor leaves. Empty price cells show no popup.
+- Hovering over a populated Buy Price or Sell Price cell for a short delay (matching the note comment indicator's deferred tooltip feel) shows a floating popup. When a live quote is available for that stock (see §6.1.2), the popup starts with a center-aligned current-price row showing the live current price and its change against the **hovered cell's price** (absolute amount and percent, e.g. `+0.42 / +4.20%`), colored red when the current price is above the hovered price and green when below it (mainland A-share convention), matching the price cell's decimal precision. Below that (or directly at the top when no live quote is available yet) are two horizontal tables: an upper table with one column per +1% through +10% step, and a lower table with one column per -1% through -10% step, each with a header row of percentage changes above a row of the corresponding computed prices (using the same 2-or-3-decimal precision as the price cell). The popup is centered under the price cell and disappears immediately when the cursor leaves. Empty price cells show no popup.
 - Closed transactions (quantity, buy price/date, and sell price/date all present) are rendered with a gray font color to visually distinguish them from open rows.
 - The Profit column shows the **net profit** whenever quantity, buy price, and sell price are all present (buy/sell dates are not required), computed as:
   - `rate = 0.025%` (trade commission rate), `min_fee = 5` (minimum commission per side)
