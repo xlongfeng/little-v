@@ -48,17 +48,35 @@ const TRADE_FEE_RATE = 0.00025;
 const MIN_TRADE_FEE = 5;
 const STOCK_STAMP_DUTY_RATE = 0.0005;
 
+export interface ProfitSettings {
+  feeRate: number;
+  minFee: number;
+  stampDutyRate: number;
+}
+
+export const DEFAULT_PROFIT_SETTINGS: ProfitSettings = {
+  feeRate: TRADE_FEE_RATE,
+  minFee: MIN_TRADE_FEE,
+  stampDutyRate: STOCK_STAMP_DUTY_RATE,
+};
+
 // Net profit for a closed round-trip: buy/sell commissions are each the
 // greater of a flat minimum fee or the rate-based fee, and only ordinary
 // A-share stocks (not ETFs/LOFs) incur stamp duty on the sell side.
-export function computeNetProfit(code: string, quantity: number, buyPrice: number, sellPrice: number): number {
+export function computeNetProfit(
+  code: string,
+  quantity: number,
+  buyPrice: number,
+  sellPrice: number,
+  settings: ProfitSettings = DEFAULT_PROFIT_SETTINGS,
+): number {
   const isStock = !isEtfOrLofCode(code);
-  const buyFee = buyPrice * quantity * TRADE_FEE_RATE;
-  const sellFee = sellPrice * quantity * TRADE_FEE_RATE;
-  const stampDutyRate = isStock ? STOCK_STAMP_DUTY_RATE : 0;
+  const buyFee = buyPrice * quantity * settings.feeRate;
+  const sellFee = sellPrice * quantity * settings.feeRate;
+  const stampDutyRate = isStock ? settings.stampDutyRate : 0;
   const stampFee = sellPrice * quantity * stampDutyRate;
   const grossProfit = (sellPrice - buyPrice) * quantity;
-  return grossProfit - Math.max(MIN_TRADE_FEE, buyFee) - Math.max(MIN_TRADE_FEE, sellFee) - stampFee;
+  return grossProfit - Math.max(settings.minFee, buyFee) - Math.max(settings.minFee, sellFee) - stampFee;
 }
 
 export function toTableRows(ledgers: StockLedger[]): TableRow[] {

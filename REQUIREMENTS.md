@@ -93,7 +93,7 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | Menu item | Behavior |
 | --- | --- |
 | **Create** | Opens the transaction creation dialog |
-| **Settings** | Shows a **General** group with a **Language** selector (English / 简体中文 / System Default) and a **Stock Quotes** group with a **Refresh interval (seconds)** control |
+| **Settings** | Shows a **General** group (Language), a **Stock Quotes** group (refresh interval), and a **Stock Fee** group (trade fee rate, minimum trade fee, stamp duty rate). All changes are staged in the dialog and only take effect after **Save**; the dialog also offers **Default** (resets the in-progress draft to the built-in defaults, without applying it) and **Cancel** (closes the dialog and discards any unsaved changes) |
 | **About** | Shows the dialog title **About Little V** followed by the app version (**Version `X.Y.Z`**) in a smaller font, and a short application description |
 
 At the far right of the menu bar, a **Total profit** indicator shows the sum of Profit (see §6.3 for the formula) across all currently visible rows (i.e. after applying the Filters).
@@ -102,16 +102,36 @@ At the far right of the menu bar, a **Total profit** indicator shows the sum of 
 
 - The app supports **English** and **Simplified Chinese** (`zh_cn`).
 - On first launch, the language preference is **Default**, which follows the OS/browser language (`navigator.language`): any locale starting with `zh` resolves to Simplified Chinese, everything else resolves to English.
-- The **Settings** dialog's **Language** dropdown offers **System Default**, **English**, and **简体中文**; choosing English or Chinese explicitly overrides the OS language, while choosing System Default clears the override and resumes following the OS language. The entire UI (menu, filters, table headers, dialogs, validation messages) updates immediately on change.
-- An explicit language choice is persisted in local storage (`littlev-language`) and takes precedence over the OS default on subsequent launches; selecting Default removes the stored override.
+- The **Settings** dialog's **Language** dropdown offers **System Default**, **English**, and **简体中文**. Choosing an option immediately previews that language throughout the interface, including the dialog itself, without persisting the change. The choice becomes the applied language only after clicking **Save** (see §6.1.3). Choosing English or Chinese explicitly overrides the OS language, while choosing System Default clears the override and resumes following the OS language.
+- An explicit language choice is persisted in local storage (`littlev-language`) and takes precedence over the OS default on subsequent launches; selecting Default and saving removes the stored override.
 
 ### 6.1.2 Live price refresh
 
 - A background task periodically fetches the current market quote (current price, previous close, and change rate) for every stock code present in the ledger, independent of the active Names/Status/Period filters.
-- The refresh interval defaults to **3 seconds** and is configurable in **Settings → Stock Quotes → Refresh interval (seconds)** (minimum 1 second); the chosen interval is persisted in local storage (`littlev-price-refresh-seconds`).
+- The refresh interval defaults to **3 seconds** and is configurable in **Settings → Stock Quotes → Refresh interval (seconds)** (minimum 1 second); the chosen value takes effect after **Save** and is persisted in local storage (`littlev-price-refresh-seconds`).
 - Polling is skipped while the application window is not visible (e.g. minimized) and resumes immediately, refreshing right away, once the window becomes visible again.
 - A quote that fails to load (e.g. a transient network error) leaves the previously fetched quote in place rather than clearing it or interrupting the polling loop.
 - The latest quotes are held in memory only and are not persisted to disk.
+
+### 6.1.3 Settings dialog editing model
+
+- The Settings dialog stages every field (Language, Refresh interval, and the Stock Fee fields below) in a local draft; opening the dialog initializes the draft from the currently applied values. Language selection is the exception in presentation only: it immediately previews the selected language, without applying or persisting it.
+- **Save** validates and applies the entire draft at once (Language, Refresh interval, and Stock Fee settings together), persists the changed values to local storage, and closes the dialog.
+- **Default** resets only the in-progress draft to the built-in defaults (System Default language, 3-second refresh interval, and the default Stock Fee values below); it does **not** apply or persist anything until **Save** is subsequently clicked.
+- **Cancel** (and the dialog's close button) discards the draft, restores the previously applied language if it was being previewed, and closes the dialog without applying or persisting any changes; the next time Settings is opened, the draft is rebuilt from the still-current applied values.
+- If a Stock Fee field cannot be parsed as a finite, non-negative number when Save is clicked, that group's changes are silently skipped while any valid Language/Refresh interval changes in the same draft are still applied.
+
+### 6.1.4 Stock Fee settings
+
+- The **Stock Fee** group in Settings makes the net-profit formula's constants (see §6.3) configurable:
+
+| Field | Default | Notes |
+| --- | --- | --- |
+| Stamp duty rate (%) | `0.05` | Percentage; stored internally as a decimal (`0.0005`); applies to the sell side of ordinary stocks only |
+| Trade fee rate (%) | `0.025` | Percentage; stored internally as a decimal (`0.00025`) |
+| Minimum trade fee | `5` | Flat currency amount per side |
+
+- Changed values apply to the Profit column and the menu bar's Total profit indicator immediately after **Save**, and are persisted in local storage (`littlev-profit-settings`).
 
 ### 6.2 Filters
 
@@ -151,12 +171,13 @@ At the far right of the menu bar, a **Total profit** indicator shows the sum of 
 - Hovering over a populated Buy Price or Sell Price cell for a short delay (matching the note comment indicator's deferred tooltip feel) shows a floating popup. When a live quote is available for that stock (see §6.1.2), the popup starts with a center-aligned current-price row showing the live current price and its change against the **hovered cell's price** (absolute amount and percent, e.g. `+0.42 / +4.20%`), colored red when the current price is above the hovered price and green when below it (mainland A-share convention), matching the price cell's decimal precision. Below that (or directly at the top when no live quote is available yet) are two horizontal tables: an upper table with one column per +1% through +10% step, and a lower table with one column per -1% through -10% step, each with a header row of percentage changes above a row of the corresponding computed prices (using the same 2-or-3-decimal precision as the price cell). The popup is centered under the price cell and disappears immediately when the cursor leaves. Empty price cells show no popup.
 - Closed transactions (quantity, buy price/date, and sell price/date all present) are rendered with a gray font color to visually distinguish them from open rows.
 - The Profit column shows the **net profit** whenever quantity, buy price, and sell price are all present (buy/sell dates are not required), computed as:
-  - `rate = 0.025%` (trade commission rate), `min_fee = 5` (minimum commission per side)
-  - `stamp_duty = 0.05%` for ordinary A-share stocks, or `0%` for ETFs/LOFs, applied only to the sell side
+  - `rate` = the configured **Trade fee rate** (default `0.025%`), `min_fee` = the configured **Minimum trade fee** (default `5`, applied per side)
+  - `stamp_duty` = the configured **Stamp duty rate** (default `0.05%`) for ordinary A-share stocks, or `0%` for ETFs/LOFs, applied only to the sell side
   - `buy_fee = buy_price * quantity * rate`, `sell_fee = sell_price * quantity * rate`
   - `stamp_fee = sell_price * quantity * stamp_duty`
   - `gross_profit = (sell_price - buy_price) * quantity`
   - `net_profit = gross_profit - max(min_fee, buy_fee) - max(min_fee, sell_fee) - stamp_fee`
+  - These rates are configurable in **Settings → Stock Fee** (see §6.1.4).
 - Double-clicking a row opens an **Edit transaction** dialog (see §7) pre-filled with that row's current values, allowing the quantity, buy/sell price and date fields, and note to be changed and saved back to the same transaction.
 - Each row ends with a **Delete transaction** icon button (visible on hover). Clicking it opens a confirmation dialog styled like the Create Transaction dialog, naming the affected stock; confirming permanently removes that transaction from its stock's ledger file and refreshes the table, while Cancel or closing the dialog leaves the transaction untouched. A deletion error is shown inside the confirmation dialog without closing it.
 - When no records match, show a clear empty state that directs the user to create a transaction.
@@ -195,4 +216,3 @@ Double-clicking a table row reopens the same dialog, titled **Edit transaction**
 8. A stock-search error is visible in the dialog and does not hide existing local stock choices.
 9. Clicking a row's **Delete transaction** icon opens a confirmation dialog; confirming removes that transaction from the ledger file and from the table, while Cancel leaves it unchanged. A deletion error is shown inside the dialog without removing other rows.
 10. Double-clicking a row opens an **Edit transaction** dialog pre-filled with its current values and a locked Stock field; saving updates that transaction in place (keeping its UUID and creation timestamp) and refreshes the table, while Cancel leaves the transaction unchanged.
-

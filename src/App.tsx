@@ -1,11 +1,21 @@
 import { invoke } from "@tauri-apps/api/core";
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { computeNetProfit, pricePrecision, toTableRows, type StockLedger, type StockOption, type TableRow } from "./ledger";
+import {
+  computeNetProfit,
+  DEFAULT_PROFIT_SETTINGS,
+  pricePrecision,
+  toTableRows,
+  type ProfitSettings,
+  type StockLedger,
+  type StockOption,
+  type TableRow,
+} from "./ledger";
 import { searchStocks, type StockQuote } from "./stockApi";
 import { version as appVersion } from "../package.json";
 import { formatRecordCount, isLanguagePreference, useLanguage, type LanguagePreference } from "./i18n";
 import { LanguageProvider } from "./LanguageProvider";
-import { MIN_REFRESH_SECONDS, PriceFeedProvider, usePriceFeed } from "./PriceFeedProvider";
+import { DEFAULT_REFRESH_SECONDS, MIN_REFRESH_SECONDS, PriceFeedProvider, usePriceFeed } from "./PriceFeedProvider";
+import { ProfitSettingsProvider, useProfitSettings } from "./ProfitSettingsProvider";
 import "./App.css";
 
 type StatusFilter = "all" | "open" | "closed";
@@ -43,20 +53,20 @@ function isRowClosed(row: { quantity?: number | null; buyPrice?: number | null; 
   );
 }
 
-function netProfitFor(row: TableRow): number | null {
+function netProfitFor(row: TableRow, settings: ProfitSettings): number | null {
   if (row.quantity == null || row.buyPrice == null || row.sellPrice == null) {
     return null;
   }
-  return computeNetProfit(row.code, row.quantity, row.buyPrice, row.sellPrice);
+  return computeNetProfit(row.code, row.quantity, row.buyPrice, row.sellPrice, settings);
 }
 
-function formatNetProfit(row: TableRow): string {
-  const profit = netProfitFor(row);
+function formatNetProfit(row: TableRow, settings: ProfitSettings): string {
+  const profit = netProfitFor(row, settings);
   return profit == null ? "" : profit.toFixed(2);
 }
 
-function formatTotalProfit(rows: TableRow[]): string {
-  const total = rows.reduce((sum, row) => sum + (netProfitFor(row) ?? 0), 0);
+function formatTotalProfit(rows: TableRow[], settings: ProfitSettings): string {
+  const total = rows.reduce((sum, row) => sum + (netProfitFor(row, settings) ?? 0), 0);
   return total.toFixed(2);
 }
 
@@ -196,19 +206,51 @@ function formFromRow(row: TableRow): TransactionForm {
   };
 }
 
+interface SettingsDraft {
+  languagePreference: string;
+  refreshIntervalSeconds: string;
+  feeRatePercent: string;
+  minFee: string;
+  stampDutyRatePercent: string;
+}
+
+function draftFromSettings(
+  languagePreference: string,
+  refreshIntervalSeconds: number,
+  profitSettings: ProfitSettings,
+): SettingsDraft {
+  return {
+    languagePreference,
+    refreshIntervalSeconds: String(refreshIntervalSeconds),
+    feeRatePercent: String(profitSettings.feeRate * 100),
+    minFee: String(profitSettings.minFee),
+    stampDutyRatePercent: String(profitSettings.stampDutyRate * 100),
+  };
+}
+
 function App() {
   return (
     <LanguageProvider>
       <PriceFeedProvider>
-        <AppContent />
+        <ProfitSettingsProvider>
+          <AppContent />
+        </ProfitSettingsProvider>
       </PriceFeedProvider>
     </LanguageProvider>
   );
 }
 
 function AppContent() {
-  const { language, languagePreference, setLanguagePreference, t } = useLanguage();
+  const {
+    language,
+    languagePreference,
+    setLanguagePreference,
+    previewLanguagePreference,
+    clearLanguagePreview,
+    t,
+  } = useLanguage();
   const { setCodes, refreshIntervalSeconds, setRefreshIntervalSeconds } = usePriceFeed();
+  const { profitSettings, setProfitSettings } = useProfitSettings();
   const [ledgers, setLedgers] = useState<StockLedger[]>([]);
   const [excludedFilterNames, setExcludedFilterNames] = useState<string[]>([]);
   const [nameFilterOpen, setNameFilterOpen] = useState(false);
@@ -218,16 +260,52 @@ function AppContent() {
   const [editingRow, setEditingRow] = useState<TableRow | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() =>
+    draftFromSettings(languagePreference, refreshIntervalSeconds, profitSettings),
+  );
   const [loadError, setLoadError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [pendingDelete, setPendingDelete] = useState<{ code: string; uuid: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [refreshIntervalInput, setRefreshIntervalInput] = useState(String(refreshIntervalSeconds));
   const nameFilterRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    setRefreshIntervalInput(String(refreshIntervalSeconds));
-  }, [refreshIntervalSeconds]);
+  function openSettings() {
+    clearLanguagePreview();
+    setSettingsDraft(draftFromSettings(languagePreference, refreshIntervalSeconds, profitSettings));
+    setSettingsOpen(true);
+  }
+
+  function resetSettingsDraftToDefault() {
+    setSettingsDraft(draftFromSettings("system", DEFAULT_REFRESH_SECONDS, DEFAULT_PROFIT_SETTINGS));
+    previewLanguagePreference("system");
+  }
+
+  function dismissSettings() {
+    clearLanguagePreview();
+    setSettingsOpen(false);
+  }
+
+  function saveSettings() {
+    if (isLanguagePreference(settingsDraft.languagePreference)) {
+      setLanguagePreference(settingsDraft.languagePreference as LanguagePreference);
+    }
+    const refreshSeconds = Number(settingsDraft.refreshIntervalSeconds);
+    if (Number.isFinite(refreshSeconds) && refreshSeconds >= MIN_REFRESH_SECONDS) {
+      setRefreshIntervalSeconds(Math.round(refreshSeconds));
+    }
+    const feeRatePercent = Number(settingsDraft.feeRatePercent);
+    const minFee = Number(settingsDraft.minFee);
+    const stampDutyRatePercent = Number(settingsDraft.stampDutyRatePercent);
+    if ([feeRatePercent, minFee, stampDutyRatePercent].every((value) => Number.isFinite(value) && value >= 0)) {
+      setProfitSettings({
+        feeRate: feeRatePercent / 100,
+        minFee,
+        stampDutyRate: stampDutyRatePercent / 100,
+      });
+    }
+    clearLanguagePreview();
+    setSettingsOpen(false);
+  }
 
   const loadLedgers = async () => {
     try {
@@ -331,10 +409,10 @@ function AppContent() {
         <div className="brand">Little V</div>
         <nav aria-label={t("table.applicationMenu")}>
           <button type="button" onClick={() => setDialogOpen(true)}>{t("menu.create")}</button>
-          <button type="button" onClick={() => setSettingsOpen(true)}>{t("menu.settings")}</button>
+          <button type="button" onClick={openSettings}>{t("menu.settings")}</button>
           <button type="button" onClick={() => setAboutOpen(true)}>{t("menu.about")}</button>
         </nav>
-        <span className="total-profit">{t("totalProfit", { value: formatTotalProfit(rows) })}</span>
+        <span className="total-profit">{t("totalProfit", { value: formatTotalProfit(rows, profitSettings) })}</span>
       </header>
 
       <section className="filter-bar" aria-label={t("table.recordControls")}>
@@ -434,7 +512,7 @@ function AppContent() {
                 <td>{row.buyDate ?? ""}</td>
                 <PriceCell price={row.sellPrice} code={row.code} />
                 <td>{row.sellDate ?? ""}</td>
-                <td>{formatNetProfit(row)}</td>
+                <td>{formatNetProfit(row, profitSettings)}</td>
                 <td className="row-actions">
                   <button
                     type="button"
@@ -527,51 +605,103 @@ function AppContent() {
         </InfoDialog>
       )}
       {settingsOpen && (
-        <InfoDialog title={t("settings.title")} onClose={() => setSettingsOpen(false)}>
-          <fieldset className="settings-group">
-            <legend>{t("settings.general")}</legend>
-            <div className="settings-grid">
-              <label htmlFor="settings-language">{t("settings.language")}</label>
-              <select
-                id="settings-language"
-                aria-label={t("settings.language")}
-                value={languagePreference}
-                onChange={(event) => {
-                  if (isLanguagePreference(event.target.value)) {
-                    setLanguagePreference(event.target.value as LanguagePreference);
-                  }
-                }}
-              >
-                <option value="system">{t("settings.languageDefault")}</option>
-                <option value="en">{t("settings.languageEnglish")}</option>
-                <option value="zh_cn">{t("settings.languageZhCn")}</option>
-              </select>
+        <div className="dialog-backdrop" role="presentation">
+          <section className="dialog info-dialog" role="dialog" aria-label={t("settings.title")}>
+            <div className="dialog-heading">
+              <h2>{t("settings.title")}</h2>
+              <button type="button" className="icon-button" onClick={dismissSettings} aria-label={t("dialog.close")}>
+                ×
+              </button>
             </div>
-          </fieldset>
-          <fieldset className="settings-group">
-            <legend>{t("settings.prices")}</legend>
-            <div className="settings-grid">
-              <label htmlFor="settings-refresh-interval">{t("settings.refreshInterval")}</label>
-              <input
-                id="settings-refresh-interval"
-                type="number"
-                min={MIN_REFRESH_SECONDS}
-                step={1}
-                aria-label={t("settings.refreshInterval")}
-                value={refreshIntervalInput}
-                onChange={(event) => setRefreshIntervalInput(event.target.value)}
-                onBlur={() => {
-                  const parsed = Number(refreshIntervalInput);
-                  if (Number.isFinite(parsed) && parsed >= MIN_REFRESH_SECONDS) {
-                    setRefreshIntervalSeconds(Math.round(parsed));
-                  } else {
-                    setRefreshIntervalInput(String(refreshIntervalSeconds));
+            <fieldset className="settings-group">
+              <legend>{t("settings.general")}</legend>
+              <div className="settings-grid">
+                <label htmlFor="settings-language">{t("settings.language")}</label>
+                <select
+                  id="settings-language"
+                  aria-label={t("settings.language")}
+                  value={settingsDraft.languagePreference}
+                  onChange={(event) => {
+                    const preference = event.target.value;
+                    setSettingsDraft((draft) => ({ ...draft, languagePreference: preference }));
+                    if (isLanguagePreference(preference)) {
+                      previewLanguagePreference(preference);
+                    }
+                  }}
+                >
+                  <option value="system">{t("settings.languageDefault")}</option>
+                  <option value="en">{t("settings.languageEnglish")}</option>
+                  <option value="zh_cn">{t("settings.languageZhCn")}</option>
+                </select>
+              </div>
+            </fieldset>
+            <fieldset className="settings-group">
+              <legend>{t("settings.prices")}</legend>
+              <div className="settings-grid">
+                <label htmlFor="settings-refresh-interval">{t("settings.refreshInterval")}</label>
+                <input
+                  id="settings-refresh-interval"
+                  type="number"
+                  min={MIN_REFRESH_SECONDS}
+                  step={1}
+                  aria-label={t("settings.refreshInterval")}
+                  value={settingsDraft.refreshIntervalSeconds}
+                  onChange={(event) =>
+                    setSettingsDraft((draft) => ({ ...draft, refreshIntervalSeconds: event.target.value }))
                   }
-                }}
-              />
+                />
+              </div>
+            </fieldset>
+            <fieldset className="settings-group">
+              <legend>{t("settings.stockProfit")}</legend>
+              <div className="settings-grid">
+                <label htmlFor="settings-stamp-duty-rate">{t("settings.stampDutyRate")}</label>
+                <input
+                  id="settings-stamp-duty-rate"
+                  type="number"
+                  min={0}
+                  step="any"
+                  aria-label={t("settings.stampDutyRate")}
+                  value={settingsDraft.stampDutyRatePercent}
+                  onChange={(event) =>
+                    setSettingsDraft((draft) => ({ ...draft, stampDutyRatePercent: event.target.value }))
+                  }
+                />
+                <label htmlFor="settings-fee-rate">{t("settings.feeRate")}</label>
+                <input
+                  id="settings-fee-rate"
+                  type="number"
+                  min={0}
+                  step="any"
+                  aria-label={t("settings.feeRate")}
+                  value={settingsDraft.feeRatePercent}
+                  onChange={(event) => setSettingsDraft((draft) => ({ ...draft, feeRatePercent: event.target.value }))}
+                />
+                <label htmlFor="settings-min-fee">{t("settings.minFee")}</label>
+                <input
+                  id="settings-min-fee"
+                  type="number"
+                  min={0}
+                  step="any"
+                  aria-label={t("settings.minFee")}
+                  value={settingsDraft.minFee}
+                  onChange={(event) => setSettingsDraft((draft) => ({ ...draft, minFee: event.target.value }))}
+                />
+              </div>
+            </fieldset>
+            <div className="dialog-actions settings-actions">
+              <button type="button" className="settings-default-button" onClick={resetSettingsDraftToDefault}>
+                {t("settings.default")}
+              </button>
+              <button type="button" onClick={dismissSettings}>
+                {t("dialog.cancel")}
+              </button>
+              <button type="button" className="primary" onClick={saveSettings}>
+                {t("dialog.save")}
+              </button>
             </div>
-          </fieldset>
-        </InfoDialog>
+          </section>
+        </div>
       )}
     </main>
   );

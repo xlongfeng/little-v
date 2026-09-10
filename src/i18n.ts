@@ -79,6 +79,11 @@ const en: Dictionary = {
   "settings.languageZhCn": "简体中文",
   "settings.prices": "Stock Quotes",
   "settings.refreshInterval": "Refresh interval (seconds)",
+  "settings.stockProfit": "Stock Fee",
+  "settings.feeRate": "Trade fee rate (%)",
+  "settings.minFee": "Minimum trade fee",
+  "settings.stampDutyRate": "Stamp duty rate (%)",
+  "settings.default": "Default",
 };
 
 const zh_cn: Dictionary = {
@@ -154,6 +159,11 @@ const zh_cn: Dictionary = {
   "settings.languageZhCn": "简体中文",
   "settings.prices": "股票行情",
   "settings.refreshInterval": "刷新间隔（秒）",
+  "settings.stockProfit": "股票手续费",
+  "settings.feeRate": "交易手续费率（%）",
+  "settings.minFee": "最低交易手续费",
+  "settings.stampDutyRate": "印花税率（%）",
+  "settings.default": "默认",
 };
 
 const translations: Record<Language, Dictionary> = { en, zh_cn };
@@ -219,6 +229,8 @@ export interface LanguageContextValue {
   language: Language;
   languagePreference: LanguagePreference;
   setLanguagePreference: (preference: LanguagePreference) => void;
+  previewLanguagePreference: (preference: LanguagePreference) => void;
+  clearLanguagePreview: () => void;
   t: (key: string, vars?: Record<string, string | number>) => string;
 }
 

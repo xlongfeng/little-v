@@ -10,11 +10,20 @@ import {
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [languagePreference, setLanguagePreferenceState] = useState<LanguagePreference>(defaultLanguagePreference);
-  const language = resolveLanguage(languagePreference);
+  const [languagePreview, setLanguagePreview] = useState<LanguagePreference | null>(null);
+  const language = resolveLanguage(languagePreview ?? languagePreference);
 
   function setLanguagePreference(next: LanguagePreference) {
     setLanguagePreferenceState(next);
     storeLanguagePreference(next);
+  }
+
+  function previewLanguagePreference(next: LanguagePreference) {
+    setLanguagePreview(next);
+  }
+
+  function clearLanguagePreview() {
+    setLanguagePreview(null);
   }
 
   function t(key: string, vars?: Record<string, string | number>): string {
@@ -22,7 +31,16 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <LanguageContext.Provider value={{ language, languagePreference, setLanguagePreference, t }}>
+    <LanguageContext.Provider
+      value={{
+        language,
+        languagePreference,
+        setLanguagePreference,
+        previewLanguagePreference,
+        clearLanguagePreview,
+        t,
+      }}
+    >
       {children}
     </LanguageContext.Provider>
   );

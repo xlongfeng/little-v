@@ -99,6 +99,8 @@ td small { display: block; color: #424242; margin-top: 2px; }
 .stock-options span { color: #424242; }
 .no-options { padding: 8px; color: #424242; font-size: 14px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.settings-actions { justify-content: flex-start; }
+.settings-default-button { margin-right: auto; }
 button.primary { color: #fff; border-color: #185abd; background: #185abd; }
 button.primary:hover { background: #14448f; }
 button.primary.danger { border-color: #a4262c; background: #a4262c; }
