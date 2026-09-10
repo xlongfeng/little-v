@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   computeNetProfit,
@@ -73,6 +75,7 @@ function formatTotalProfit(rows: TableRow[], settings: ProfitSettings): string {
 const UP_STEPS = Array.from({ length: 10 }, (_, index) => index + 1);
 const DOWN_STEPS = Array.from({ length: 10 }, (_, index) => -(index + 1));
 const HOVER_POPUP_DELAY_MS = 500;
+const DATA_DIRECTORY_STORAGE_KEY = "littlev-stock-data-directory";
 
 function quoteChangeClass(quote: StockQuote, referencePrice: number): string {
   if (quote.now > referencePrice) {
@@ -207,6 +210,7 @@ function formFromRow(row: TableRow): TransactionForm {
 }
 
 interface SettingsDraft {
+  dataDirectory: string;
   languagePreference: string;
   refreshIntervalSeconds: string;
   feeRatePercent: string;
@@ -215,11 +219,13 @@ interface SettingsDraft {
 }
 
 function draftFromSettings(
+  dataDirectory: string,
   languagePreference: string,
   refreshIntervalSeconds: number,
   profitSettings: ProfitSettings,
 ): SettingsDraft {
   return {
+    dataDirectory,
     languagePreference,
     refreshIntervalSeconds: String(refreshIntervalSeconds),
     feeRatePercent: String(profitSettings.feeRate * 100),
@@ -260,9 +266,12 @@ function AppContent() {
   const [editingRow, setEditingRow] = useState<TableRow | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [dataDirectory, setDataDirectory] = useState("");
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() =>
-    draftFromSettings(languagePreference, refreshIntervalSeconds, profitSettings),
+    draftFromSettings("", languagePreference, refreshIntervalSeconds, profitSettings),
   );
+  const [settingsError, setSettingsError] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [pendingDelete, setPendingDelete] = useState<{ code: string; uuid: string; name: string } | null>(null);
@@ -271,40 +280,79 @@ function AppContent() {
 
   function openSettings() {
     clearLanguagePreview();
-    setSettingsDraft(draftFromSettings(languagePreference, refreshIntervalSeconds, profitSettings));
+    setSettingsError("");
+    setSettingsDraft(draftFromSettings(dataDirectory, languagePreference, refreshIntervalSeconds, profitSettings));
     setSettingsOpen(true);
   }
 
-  function resetSettingsDraftToDefault() {
-    setSettingsDraft(draftFromSettings("system", DEFAULT_REFRESH_SECONDS, DEFAULT_PROFIT_SETTINGS));
+  async function resetSettingsDraftToDefault() {
+    try {
+      const defaultDataDirectory = await invoke<string>("get_default_data_directory");
+      setSettingsDraft(draftFromSettings(defaultDataDirectory, "system", DEFAULT_REFRESH_SECONDS, DEFAULT_PROFIT_SETTINGS));
+      setSettingsError("");
+    } catch (error) {
+      setSettingsError(String(error));
+    }
     previewLanguagePreference("system");
   }
 
   function dismissSettings() {
     clearLanguagePreview();
+    setSettingsError("");
     setSettingsOpen(false);
   }
 
-  function saveSettings() {
-    if (isLanguagePreference(settingsDraft.languagePreference)) {
-      setLanguagePreference(settingsDraft.languagePreference as LanguagePreference);
-    }
+  async function saveSettings() {
     const refreshSeconds = Number(settingsDraft.refreshIntervalSeconds);
-    if (Number.isFinite(refreshSeconds) && refreshSeconds >= MIN_REFRESH_SECONDS) {
-      setRefreshIntervalSeconds(Math.round(refreshSeconds));
-    }
     const feeRatePercent = Number(settingsDraft.feeRatePercent);
     const minFee = Number(settingsDraft.minFee);
     const stampDutyRatePercent = Number(settingsDraft.stampDutyRatePercent);
-    if ([feeRatePercent, minFee, stampDutyRatePercent].every((value) => Number.isFinite(value) && value >= 0)) {
+    if (
+      !isLanguagePreference(settingsDraft.languagePreference) ||
+      !settingsDraft.dataDirectory.trim() ||
+      !Number.isFinite(refreshSeconds) ||
+      refreshSeconds < MIN_REFRESH_SECONDS ||
+      ![feeRatePercent, minFee, stampDutyRatePercent].every((value) => Number.isFinite(value) && value >= 0)
+    ) {
+      setSettingsError(t("settings.invalidValues"));
+      return;
+    }
+
+    setSavingSettings(true);
+    try {
+      const selectedDirectory = await invoke<string>("set_data_directory", {
+        directory: settingsDraft.dataDirectory.trim(),
+      });
+      window.localStorage.setItem(DATA_DIRECTORY_STORAGE_KEY, selectedDirectory);
+      setDataDirectory(selectedDirectory);
+      setLanguagePreference(settingsDraft.languagePreference as LanguagePreference);
+      setRefreshIntervalSeconds(Math.round(refreshSeconds));
       setProfitSettings({
         feeRate: feeRatePercent / 100,
         minFee,
         stampDutyRate: stampDutyRatePercent / 100,
       });
+      clearLanguagePreview();
+      setSettingsOpen(false);
+      setSettingsError("");
+      await loadLedgers();
+    } catch (error) {
+      setSettingsError(String(error));
+    } finally {
+      setSavingSettings(false);
     }
-    clearLanguagePreview();
-    setSettingsOpen(false);
+  }
+
+  async function chooseDataDirectory() {
+    const directory = await open({
+      defaultPath: settingsDraft.dataDirectory || undefined,
+      directory: true,
+      multiple: false,
+      title: t("settings.selectDataDirectory"),
+    });
+    if (typeof directory === "string") {
+      setSettingsDraft((draft) => ({ ...draft, dataDirectory: directory }));
+    }
   }
 
   const loadLedgers = async () => {
@@ -317,7 +365,43 @@ function AppContent() {
   };
 
   useEffect(() => {
-    void loadLedgers();
+    let cancelled = false;
+    async function initializeDataDirectory() {
+      try {
+        const storedDirectory = window.localStorage.getItem(DATA_DIRECTORY_STORAGE_KEY);
+        const directory = storedDirectory
+          ? await invoke<string>("set_data_directory", { directory: storedDirectory })
+          : await invoke<string>("get_data_directory");
+        if (!cancelled) {
+          setDataDirectory(directory);
+          await loadLedgers();
+        }
+      } catch (error) {
+        if (!cancelled) {
+          window.localStorage.removeItem(DATA_DIRECTORY_STORAGE_KEY);
+          setLoadError(String(error));
+          await loadLedgers();
+        }
+      }
+    }
+    void initializeDataDirectory();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen("stock-ledgers-changed", () => {
+      void loadLedgers();
+    }).then((stopListening) => {
+      unlisten = stopListening;
+    }).catch((error) => {
+      setLoadError(String(error));
+    });
+    return () => {
+      unlisten?.();
+    };
   }, []);
 
   async function confirmDeleteTransaction() {
@@ -636,6 +720,26 @@ function AppContent() {
               </div>
             </fieldset>
             <fieldset className="settings-group">
+              <legend>{t("settings.storage")}</legend>
+              <div className="settings-grid">
+                <label htmlFor="settings-data-directory">{t("settings.dataDirectory")}</label>
+                <div className="data-directory-input">
+                  <input
+                    id="settings-data-directory"
+                    type="text"
+                    aria-label={t("settings.dataDirectory")}
+                    value={settingsDraft.dataDirectory}
+                    onChange={(event) =>
+                      setSettingsDraft((draft) => ({ ...draft, dataDirectory: event.target.value }))
+                    }
+                  />
+                  <button type="button" onClick={() => void chooseDataDirectory()}>
+                    {t("settings.browse")}
+                  </button>
+                </div>
+              </div>
+            </fieldset>
+            <fieldset className="settings-group">
               <legend>{t("settings.prices")}</legend>
               <div className="settings-grid">
                 <label htmlFor="settings-refresh-interval">{t("settings.refreshInterval")}</label>
@@ -689,14 +793,15 @@ function AppContent() {
                 />
               </div>
             </fieldset>
+            {settingsError && <p className="field-error" role="alert">{settingsError}</p>}
             <div className="dialog-actions settings-actions">
-              <button type="button" className="settings-default-button" onClick={resetSettingsDraftToDefault}>
+              <button type="button" className="settings-default-button" onClick={() => void resetSettingsDraftToDefault()} disabled={savingSettings}>
                 {t("settings.default")}
               </button>
-              <button type="button" onClick={dismissSettings}>
+              <button type="button" onClick={dismissSettings} disabled={savingSettings}>
                 {t("dialog.cancel")}
               </button>
-              <button type="button" className="primary" onClick={saveSettings}>
+              <button type="button" className="primary" onClick={() => void saveSettings()} disabled={savingSettings}>
                 {t("dialog.save")}
               </button>
             </div>

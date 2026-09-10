@@ -90,6 +90,8 @@ td small { display: block; color: #424242; margin-top: 2px; }
 .settings-group > legend { padding: 0 6px; color: #185abd; font-weight: 700; font-size: 14px; }
 .settings-grid { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 10px 14px; }
 .settings-grid label, .settings-grid > label { font-weight: 700; font-size: 14px; color: #212121; }
+.data-directory-input { display: flex; min-width: 0; gap: 8px; }
+.data-directory-input input { min-width: 0; flex: 1; }
 .stock-combobox { position: relative; display: flex; }
 .stock-combobox input { padding-right: 40px; }
 .combobox-toggle { position: absolute; top: 1px; right: 1px; height: calc(100% - 2px); border: 0; border-left: 1px solid #b3b3b3; border-radius: 0 2px 2px 0; padding: 0 12px; background: #f3f3f3; }
@@ -114,6 +116,5 @@ button:disabled { cursor: not-allowed; opacity: .65; }
 .delete-row { font-size: 15px; color: #a4262c; opacity: 0; transition: opacity .1s ease; }
 tbody tr:hover .delete-row { opacity: 1; }
 .delete-row:hover { background: #fbe4e4; }
-
 
 

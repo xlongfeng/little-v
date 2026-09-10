@@ -16,13 +16,13 @@
 | Area | Included |
 | --- | --- |
 | Platform | Tauri desktop application with a React and TypeScript interface |
-| Storage | Local JSON files in the application data directory |
+| Storage | Local JSON stock ledgers in a configurable user folder; application preferences and the selected folder are kept in browser `localStorage` |
 | Transactions | Create and delete buy and sell transactions |
 | Stock selection | A unified combobox for existing stocks and search through [`stock-api`](https://github.com/zhangxiangliang/stock-api) |
 | Ledger behavior | Transactions can be created, edited (double-click a row), and deleted (via a delete icon at the end of each row) |
 | Lot shape | Each transaction directly carries its own optional buy price/date and sell price/date |
 
-The first release does **not** include partial lot closing, transaction editing, portfolio performance calculations, cloud synchronization, or a configurable storage location.
+The first release does **not** include partial lot closing, portfolio performance calculations, or cloud synchronization.
 
 ## 3. Technology
 
@@ -35,10 +35,12 @@ The first release does **not** include partial lot closing, transaction editing,
 
 ### 4.1 Location and files
 
-- Ledger files are stored in the Tauri application data directory under a `stocks` folder.
+- Ledger files are stored under a `stocks` folder in the configured data folder, which defaults to `Documents\Little V` for the current user.
 - Each file represents one stock and is named `<stock-code>.json`.
 - A stock code may contain letters, numbers, hyphens, and underscores.
 - Saving a transaction updates only that stock's ledger file.
+- Deleting the final transaction in a ledger also deletes that ledger's stock file.
+- Changes to stock files made outside Little V are detected automatically and reload the table.
 
 ### 4.2 JSON structure
 
@@ -93,7 +95,7 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | Menu item | Behavior |
 | --- | --- |
 | **Create** | Opens the transaction creation dialog |
-| **Settings** | Shows a **General** group (Language), a **Stock Quotes** group (refresh interval), and a **Stock Fee** group (trade fee rate, minimum trade fee, stamp duty rate). All changes are staged in the dialog and only take effect after **Save**; the dialog also offers **Default** (resets the in-progress draft to the built-in defaults, without applying it) and **Cancel** (closes the dialog and discards any unsaved changes) |
+| **Settings** | Shows **General** (Language), **Storage** (data folder), **Stock Quotes** (refresh interval), and **Stock Fee** (stamp duty rate, trade fee rate, minimum trade fee) groups. All changes are staged in the dialog and only take effect after **Save**; the dialog also offers **Default** (resets the in-progress draft to the built-in defaults, without applying it) and **Cancel** (closes the dialog and discards any unsaved changes) |
 | **About** | Shows the dialog title **About Little V** followed by the app version (**Version `X.Y.Z`**) in a smaller font, and a short application description |
 
 At the far right of the menu bar, a **Total profit** indicator shows the sum of Profit (see §6.3 for the formula) across all currently visible rows (i.e. after applying the Filters).
@@ -103,25 +105,34 @@ At the far right of the menu bar, a **Total profit** indicator shows the sum of 
 - The app supports **English** and **Simplified Chinese** (`zh_cn`).
 - On first launch, the language preference is **Default**, which follows the OS/browser language (`navigator.language`): any locale starting with `zh` resolves to Simplified Chinese, everything else resolves to English.
 - The **Settings** dialog's **Language** dropdown offers **System Default**, **English**, and **简体中文**. Choosing an option immediately previews that language throughout the interface, including the dialog itself, without persisting the change. The choice becomes the applied language only after clicking **Save** (see §6.1.3). Choosing English or Chinese explicitly overrides the OS language, while choosing System Default clears the override and resumes following the OS language.
-- An explicit language choice is persisted in local storage (`littlev-language`) and takes precedence over the OS default on subsequent launches; selecting Default and saving removes the stored override.
+- An explicit language choice is persisted in browser `localStorage` (`littlev-language`) and takes precedence over the OS default on subsequent launches; selecting Default and saving removes the stored override.
 
 ### 6.1.2 Live price refresh
 
 - A background task periodically fetches the current market quote (current price, previous close, and change rate) for every stock code present in the ledger, independent of the active Names/Status/Period filters.
-- The refresh interval defaults to **3 seconds** and is configurable in **Settings → Stock Quotes → Refresh interval (seconds)** (minimum 1 second); the chosen value takes effect after **Save** and is persisted in local storage (`littlev-price-refresh-seconds`).
+- The refresh interval defaults to **3 seconds** and is configurable in **Settings → Stock Quotes → Refresh interval (seconds)** (minimum 1 second); the chosen value takes effect after **Save** and is persisted in browser `localStorage` (`littlev-price-refresh-seconds`).
 - Polling is skipped while the application window is not visible (e.g. minimized) and resumes immediately, refreshing right away, once the window becomes visible again.
 - A quote that fails to load (e.g. a transient network error) leaves the previously fetched quote in place rather than clearing it or interrupting the polling loop.
 - The latest quotes are held in memory only and are not persisted to disk.
 
 ### 6.1.3 Settings dialog editing model
 
-- The Settings dialog stages every field (Language, Refresh interval, and the Stock Fee fields below) in a local draft; opening the dialog initializes the draft from the currently applied values. Language selection is the exception in presentation only: it immediately previews the selected language, without applying or persisting it.
-- **Save** validates and applies the entire draft at once (Language, Refresh interval, and Stock Fee settings together), persists the changed values to local storage, and closes the dialog.
+- The Settings dialog stages every field (Language, data folder, Refresh interval, and the Stock Fee fields below) in a local draft; opening the dialog initializes the draft from the currently applied values. Language selection is the exception in presentation only: it immediately previews the selected language, without applying or persisting it.
+- **Save** validates and applies the entire draft at once (data folder, Language, Refresh interval, and Stock Fee settings together). Every applied setting is persisted in browser `localStorage`.
 - **Default** resets only the in-progress draft to the built-in defaults (System Default language, 3-second refresh interval, and the default Stock Fee values below); it does **not** apply or persist anything until **Save** is subsequently clicked.
 - **Cancel** (and the dialog's close button) discards the draft, restores the previously applied language if it was being previewed, and closes the dialog without applying or persisting any changes; the next time Settings is opened, the draft is rebuilt from the still-current applied values.
-- If a Stock Fee field cannot be parsed as a finite, non-negative number when Save is clicked, that group's changes are silently skipped while any valid Language/Refresh interval changes in the same draft are still applied.
+- Save rejects the draft when the data folder is blank or unavailable, the refresh interval is below one second, or a Stock Fee field is not a finite, non-negative number; no draft values are applied in that case.
 
-### 6.1.4 Stock Fee settings
+### 6.1.4 Storage
+
+- The application data folder defaults to **`Documents\Little V`** for the current user.
+- The **Settings → Storage → Data folder** control accepts an absolute existing directory and provides a native **Browse** picker. The selected directory takes effect after **Save**.
+- The chosen folder contains only stock data: the stock ledger directory, **`stocks\`**, whose files are named **`<stock-code>.json`**.
+- The selected data folder is persisted in browser `localStorage` as `littlev-stock-data-directory`. Language, refresh interval, and Stock Fee values use their own `localStorage` keys, so no application setting is stored with the stock data folder.
+- Choosing a different data folder switches to that folder's ledger collection. It does not move or merge data from the previous folder.
+- Little V monitors the selected `stocks\` directory. When stock JSON files are added, modified, renamed, or deleted outside the application, it automatically reloads the table from disk.
+
+### 6.1.5 Stock Fee settings
 
 - The **Stock Fee** group in Settings makes the net-profit formula's constants (see §6.3) configurable:
 
@@ -131,7 +142,7 @@ At the far right of the menu bar, a **Total profit** indicator shows the sum of 
 | Trade fee rate (%) | `0.025` | Percentage; stored internally as a decimal (`0.00025`) |
 | Minimum trade fee | `5` | Flat currency amount per side |
 
-- Changed values apply to the Profit column and the menu bar's Total profit indicator immediately after **Save**, and are persisted in local storage (`littlev-profit-settings`).
+- Changed values apply to the Profit column and the menu bar's Total profit indicator immediately after **Save**, and are persisted in browser `localStorage` (`littlev-profit-settings`).
 
 ### 6.2 Filters
 
@@ -177,7 +188,7 @@ At the far right of the menu bar, a **Total profit** indicator shows the sum of 
   - `stamp_fee = sell_price * quantity * stamp_duty`
   - `gross_profit = (sell_price - buy_price) * quantity`
   - `net_profit = gross_profit - max(min_fee, buy_fee) - max(min_fee, sell_fee) - stamp_fee`
-  - These rates are configurable in **Settings → Stock Fee** (see §6.1.4).
+  - These rates are configurable in **Settings → Stock Fee** (see §6.1.5).
 - Double-clicking a row opens an **Edit transaction** dialog (see §7) pre-filled with that row's current values, allowing the quantity, buy/sell price and date fields, and note to be changed and saved back to the same transaction.
 - Each row ends with a **Delete transaction** icon button (visible on hover). Clicking it opens a confirmation dialog styled like the Create Transaction dialog, naming the affected stock; confirming permanently removes that transaction from its stock's ledger file and refreshes the table, while Cancel or closing the dialog leaves the transaction untouched. A deletion error is shown inside the confirmation dialog without closing it.
 - When no records match, show a clear empty state that directs the user to create a transaction.

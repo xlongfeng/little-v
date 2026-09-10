@@ -1,11 +1,21 @@
 use chrono::Utc;
+use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc::{self, RecvTimeoutError},
+        Arc, Mutex, MutexGuard,
+    },
+    thread,
+    time::Duration,
 };
-use tauri::Manager;
+use tauri::{Emitter, Manager, State};
 use uuid::Uuid;
+
+const STOCK_LEDGERS_CHANGED_EVENT: &str = "stock-ledgers-changed";
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -54,11 +64,29 @@ pub struct UpdateTransactionRequest {
     pub note: Option<String>,
 }
 
-fn ledger_directory(app_data_dir: &Path) -> PathBuf {
-    app_data_dir.join("stocks")
+struct StorageInner {
+    root: PathBuf,
+    _watcher: RecommendedWatcher,
 }
 
-fn stock_path(app_data_dir: &Path, code: &str) -> Result<PathBuf, String> {
+struct StorageState {
+    inner: Mutex<StorageInner>,
+    watcher_generation: Arc<AtomicU64>,
+}
+
+impl StorageState {
+    fn lock(&self) -> Result<MutexGuard<'_, StorageInner>, String> {
+        self.inner
+            .lock()
+            .map_err(|_| "Storage state is unavailable because its lock was poisoned.".into())
+    }
+}
+
+fn ledger_directory(storage_root: &Path) -> PathBuf {
+    storage_root.join("stocks")
+}
+
+fn stock_path(storage_root: &Path, code: &str) -> Result<PathBuf, String> {
     if code.is_empty()
         || !code.chars().all(|character| {
             character.is_ascii_alphanumeric() || character == '-' || character == '_'
@@ -69,11 +97,44 @@ fn stock_path(app_data_dir: &Path, code: &str) -> Result<PathBuf, String> {
         );
     }
 
-    Ok(ledger_directory(app_data_dir).join(format!("{code}.json")))
+    Ok(ledger_directory(storage_root).join(format!("{code}.json")))
 }
 
-fn load_ledgers_from(app_data_dir: &Path) -> Result<Vec<StockLedger>, String> {
-    let directory = ledger_directory(app_data_dir);
+fn write_json_file(path: &Path, value: &impl Serialize) -> Result<(), String> {
+    let serialized = serde_json::to_vec_pretty(value)
+        .map_err(|error| format!("Could not serialize {}: {error}", path.display()))?;
+    let temporary_path = path.with_extension("json.tmp");
+    fs::write(&temporary_path, serialized)
+        .map_err(|error| format!("Could not stage {}: {error}", path.display()))?;
+    fs::rename(&temporary_path, path)
+        .map_err(|error| format!("Could not save {}: {error}", path.display()))
+}
+
+fn ensure_storage_root(storage_root: &Path) -> Result<(), String> {
+    if storage_root.exists() && !storage_root.is_dir() {
+        return Err(format!(
+            "Data directory path is not a directory: {}",
+            storage_root.display()
+        ));
+    }
+    fs::create_dir_all(storage_root).map_err(|error| {
+        format!(
+            "Could not create data directory {}: {error}",
+            storage_root.display()
+        )
+    })?;
+    fs::create_dir_all(ledger_directory(storage_root)).map_err(|error| {
+        format!(
+            "Could not create stock ledger directory {}: {error}",
+            ledger_directory(storage_root).display()
+        )
+    })?;
+
+    Ok(())
+}
+
+fn load_ledgers_from(storage_root: &Path) -> Result<Vec<StockLedger>, String> {
+    let directory = ledger_directory(storage_root);
     if !directory.exists() {
         return Ok(Vec::new());
     }
@@ -189,13 +250,13 @@ fn validate_request(request: &CreateTransactionRequest) -> Result<(), String> {
 }
 
 fn save_transaction_to(
-    app_data_dir: &Path,
+    storage_root: &Path,
     request: CreateTransactionRequest,
 ) -> Result<Transaction, String> {
     validate_request(&request)?;
     let code = request.code.trim().to_uppercase();
-    let path = stock_path(app_data_dir, &code)?;
-    fs::create_dir_all(ledger_directory(app_data_dir))
+    let path = stock_path(storage_root, &code)?;
+    fs::create_dir_all(ledger_directory(storage_root))
         .map_err(|error| format!("Could not create ledger directory: {error}"))?;
 
     let mut ledger = if path.exists() {
@@ -231,23 +292,13 @@ fn save_transaction_to(
 
     ledger.transactions.push(transaction.clone());
 
-    let serialized = serde_json::to_vec_pretty(&ledger)
-        .map_err(|error| format!("Could not serialize ledger: {error}"))?;
-    let temporary_path = path.with_extension("json.tmp");
-    fs::write(&temporary_path, serialized)
-        .map_err(|error| format!("Could not stage {}: {error}", path.display()))?;
-    fs::rename(&temporary_path, &path)
-        .map_err(|error| format!("Could not save {}: {error}", path.display()))?;
+    write_json_file(&path, &ledger)?;
     Ok(transaction)
 }
 
-fn delete_transaction_from(
-    app_data_dir: &Path,
-    code: &str,
-    uuid: &str,
-) -> Result<(), String> {
+fn delete_transaction_from(storage_root: &Path, code: &str, uuid: &str) -> Result<(), String> {
     let code = code.trim().to_uppercase();
-    let path = stock_path(app_data_dir, &code)?;
+    let path = stock_path(storage_root, &code)?;
     if !path.exists() {
         return Err(format!("No ledger found for stock code {code}."));
     }
@@ -258,23 +309,24 @@ fn delete_transaction_from(
         .map_err(|error| format!("Could not parse {}: {error}", path.display()))?;
 
     let original_len = ledger.transactions.len();
-    ledger.transactions.retain(|transaction| transaction.uuid != uuid);
+    ledger
+        .transactions
+        .retain(|transaction| transaction.uuid != uuid);
     if ledger.transactions.len() == original_len {
         return Err("Transaction not found.".into());
     }
 
-    let serialized = serde_json::to_vec_pretty(&ledger)
-        .map_err(|error| format!("Could not serialize ledger: {error}"))?;
-    let temporary_path = path.with_extension("json.tmp");
-    fs::write(&temporary_path, serialized)
-        .map_err(|error| format!("Could not stage {}: {error}", path.display()))?;
-    fs::rename(&temporary_path, &path)
-        .map_err(|error| format!("Could not save {}: {error}", path.display()))?;
+    if ledger.transactions.is_empty() {
+        fs::remove_file(&path)
+            .map_err(|error| format!("Could not delete {}: {error}", path.display()))?;
+    } else {
+        write_json_file(&path, &ledger)?;
+    }
     Ok(())
 }
 
 fn update_transaction_in(
-    app_data_dir: &Path,
+    storage_root: &Path,
     request: UpdateTransactionRequest,
 ) -> Result<Transaction, String> {
     validate_fields(
@@ -286,7 +338,7 @@ fn update_transaction_in(
     )?;
 
     let code = request.code.trim().to_uppercase();
-    let path = stock_path(app_data_dir, &code)?;
+    let path = stock_path(storage_root, &code)?;
     if !path.exists() {
         return Err(format!("No ledger found for stock code {code}."));
     }
@@ -316,56 +368,187 @@ fn update_transaction_in(
         .map(str::to_string);
     let updated = transaction.clone();
 
-    let serialized = serde_json::to_vec_pretty(&ledger)
-        .map_err(|error| format!("Could not serialize ledger: {error}"))?;
-    let temporary_path = path.with_extension("json.tmp");
-    fs::write(&temporary_path, serialized)
-        .map_err(|error| format!("Could not stage {}: {error}", path.display()))?;
-    fs::rename(&temporary_path, &path)
-        .map_err(|error| format!("Could not save {}: {error}", path.display()))?;
+    write_json_file(&path, &ledger)?;
     Ok(updated)
 }
 
+fn is_ledger_event(event: &Event) -> bool {
+    matches!(
+        event.kind,
+        EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
+    ) && event.paths.iter().any(|path| {
+        path.extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
+    })
+}
+
+fn create_ledger_watcher(
+    app: tauri::AppHandle,
+    storage_root: &Path,
+    watcher_generation: Arc<AtomicU64>,
+    generation: u64,
+) -> Result<RecommendedWatcher, String> {
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        while receiver.recv().is_ok() {
+            loop {
+                match receiver.recv_timeout(Duration::from_millis(150)) {
+                    Ok(()) => {}
+                    Err(RecvTimeoutError::Timeout) => {
+                        if watcher_generation.load(Ordering::Acquire) == generation {
+                            let _ = app.emit(STOCK_LEDGERS_CHANGED_EVENT, ());
+                        }
+                        break;
+                    }
+                    Err(RecvTimeoutError::Disconnected) => return,
+                }
+            }
+        }
+    });
+
+    let mut watcher = RecommendedWatcher::new(
+        move |result: notify::Result<Event>| match result {
+            Ok(event) if is_ledger_event(&event) => {
+                let _ = sender.send(());
+            }
+            Ok(_) => {}
+            Err(error) => eprintln!("Stock ledger watcher error: {error}"),
+        },
+        Config::default(),
+    )
+    .map_err(|error| format!("Could not create stock ledger watcher: {error}"))?;
+    watcher
+        .watch(
+            ledger_directory(storage_root).as_path(),
+            RecursiveMode::NonRecursive,
+        )
+        .map_err(|error| {
+            format!(
+                "Could not watch stock ledger directory {}: {error}",
+                ledger_directory(storage_root).display()
+            )
+        })?;
+    Ok(watcher)
+}
+
+fn default_storage_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .document_dir()
+        .map(|path| path.join("Little V"))
+        .map_err(|error| format!("Could not find the current user's Documents directory: {error}"))
+}
+
 #[tauri::command]
-fn load_stock_ledgers(app: tauri::AppHandle) -> Result<Vec<StockLedger>, String> {
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("Could not find application data directory: {error}"))?;
-    load_ledgers_from(&app_data_dir)
+fn get_data_directory(state: State<'_, StorageState>) -> Result<String, String> {
+    state
+        .lock()?
+        .root
+        .clone()
+        .into_os_string()
+        .into_string()
+        .map_err(|path| {
+            format!(
+                "Data directory is not valid Unicode: {}",
+                path.to_string_lossy()
+            )
+        })
+}
+
+#[tauri::command]
+fn get_default_data_directory(app: tauri::AppHandle) -> Result<String, String> {
+    default_storage_root(&app)?
+        .into_os_string()
+        .into_string()
+        .map_err(|path| {
+            format!(
+                "Default data directory is not valid Unicode: {}",
+                path.to_string_lossy()
+            )
+        })
+}
+
+#[tauri::command]
+fn set_data_directory(
+    app: tauri::AppHandle,
+    state: State<'_, StorageState>,
+    directory: String,
+) -> Result<String, String> {
+    let requested = PathBuf::from(directory.trim());
+    if !requested.is_absolute() {
+        return Err("Data directory must be an absolute path.".into());
+    }
+    if !requested.exists() {
+        return Err(format!(
+            "Data directory does not exist: {}",
+            requested.display()
+        ));
+    }
+    if !requested.is_dir() {
+        return Err(format!(
+            "Data directory path is not a directory: {}",
+            requested.display()
+        ));
+    }
+    let root = requested;
+    ensure_storage_root(&root)?;
+
+    let mut inner = state.lock()?;
+    let next_generation = state.watcher_generation.load(Ordering::Acquire) + 1;
+    let watcher = create_ledger_watcher(
+        app.clone(),
+        &root,
+        Arc::clone(&state.watcher_generation),
+        next_generation,
+    )?;
+    state
+        .watcher_generation
+        .store(next_generation, Ordering::Release);
+    inner.root = root.clone();
+    inner._watcher = watcher;
+    if let Err(error) = app.emit(STOCK_LEDGERS_CHANGED_EVENT, ()) {
+        eprintln!("Could not notify the application of the data directory change: {error}");
+    }
+
+    root.into_os_string().into_string().map_err(|path| {
+        format!(
+            "Selected data directory is not valid Unicode: {}",
+            path.to_string_lossy()
+        )
+    })
+}
+
+#[tauri::command]
+fn load_stock_ledgers(state: State<'_, StorageState>) -> Result<Vec<StockLedger>, String> {
+    let inner = state.lock()?;
+    load_ledgers_from(&inner.root)
 }
 
 #[tauri::command]
 fn create_transaction(
-    app: tauri::AppHandle,
+    state: State<'_, StorageState>,
     request: CreateTransactionRequest,
 ) -> Result<Transaction, String> {
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("Could not find application data directory: {error}"))?;
-    save_transaction_to(&app_data_dir, request)
+    let inner = state.lock()?;
+    save_transaction_to(&inner.root, request)
 }
 
 #[tauri::command]
-fn delete_transaction(app: tauri::AppHandle, code: String, uuid: String) -> Result<(), String> {
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("Could not find application data directory: {error}"))?;
-    delete_transaction_from(&app_data_dir, &code, &uuid)
+fn delete_transaction(
+    state: State<'_, StorageState>,
+    code: String,
+    uuid: String,
+) -> Result<(), String> {
+    let inner = state.lock()?;
+    delete_transaction_from(&inner.root, &code, &uuid)
 }
 
 #[tauri::command]
 fn update_transaction(
-    app: tauri::AppHandle,
+    state: State<'_, StorageState>,
     request: UpdateTransactionRequest,
 ) -> Result<Transaction, String> {
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("Could not find application data directory: {error}"))?;
-    update_transaction_in(&app_data_dir, request)
+    let inner = state.lock()?;
+    update_transaction_in(&inner.root, request)
 }
 
 #[cfg(test)]
@@ -471,7 +654,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(transaction.note, Some("Remember to review earnings.".into()));
+        assert_eq!(
+            transaction.note,
+            Some("Remember to review earnings.".into())
+        );
     }
 
     #[test]
@@ -585,7 +771,8 @@ mod tests {
         assert_eq!(transaction.quantity, Some(1000));
 
         let ledger = load_ledgers_from(directory.path()).unwrap().pop().unwrap();
-        let saved = fs::read_to_string(stock_path(directory.path(), &ledger.code).unwrap()).unwrap();
+        let saved =
+            fs::read_to_string(stock_path(directory.path(), &ledger.code).unwrap()).unwrap();
         assert!(saved.contains("\"quantity\": 1000") || saved.contains("\"quantity\":1000"));
         assert!(!saved.contains("1000.0"));
     }
@@ -620,6 +807,18 @@ mod tests {
             .transactions
             .iter()
             .all(|transaction| transaction.uuid != first.uuid));
+    }
+
+    #[test]
+    fn deletes_the_ledger_file_with_its_final_transaction() {
+        let directory = tempdir().unwrap();
+        let transaction = save_transaction_to(directory.path(), base_request()).unwrap();
+        let path = stock_path(directory.path(), "EXAMPLE").unwrap();
+
+        delete_transaction_from(directory.path(), "EXAMPLE", &transaction.uuid).unwrap();
+
+        assert!(!path.exists());
+        assert!(load_ledgers_from(directory.path()).unwrap().is_empty());
     }
 
     #[test]
@@ -736,7 +935,8 @@ mod tests {
         let directory = tempdir().unwrap();
         save_transaction_to(directory.path(), base_request()).unwrap();
 
-        let result = update_transaction_in(directory.path(), base_update("EXAMPLE", "missing-uuid"));
+        let result =
+            update_transaction_in(directory.path(), base_update("EXAMPLE", "missing-uuid"));
         assert!(result.unwrap_err().contains("not found"));
     }
 
@@ -752,7 +952,32 @@ mod tests {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            let root = default_storage_root(&app_handle)
+                .and_then(|root| {
+                    ensure_storage_root(&root)?;
+                    Ok(root)
+                })
+                .map_err(std::io::Error::other)?;
+            let watcher_generation = Arc::new(AtomicU64::new(1));
+            let watcher =
+                create_ledger_watcher(app_handle, &root, Arc::clone(&watcher_generation), 1)
+                    .map_err(std::io::Error::other)?;
+            app.manage(StorageState {
+                inner: Mutex::new(StorageInner {
+                    root,
+                    _watcher: watcher,
+                }),
+                watcher_generation,
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
+            get_data_directory,
+            get_default_data_directory,
+            set_data_directory,
             load_stock_ledgers,
             create_transaction,
             delete_transaction,

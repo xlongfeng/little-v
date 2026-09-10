@@ -1,16 +1,20 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
-const { invoke, searchStocks, fetchQuotes } = vi.hoisted(() => ({
+const { invoke, listen, open, searchStocks, fetchQuotes } = vi.hoisted(() => ({
   invoke: vi.fn(),
+  listen: vi.fn(),
+  open: vi.fn(),
   searchStocks: vi.fn(),
   fetchQuotes: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+vi.mock("@tauri-apps/api/event", () => ({ listen }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open }));
 vi.mock("./stockApi", () => ({ searchStocks, fetchQuotes }));
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -24,10 +28,14 @@ describe("App", () => {
   beforeEach(() => {
     window.localStorage.clear();
     invoke.mockReset();
+    listen.mockReset();
+    open.mockReset();
     searchStocks.mockReset();
     fetchQuotes.mockReset();
     fetchQuotes.mockResolvedValue({});
-    invoke.mockResolvedValue([
+    listen.mockResolvedValue(vi.fn());
+    open.mockResolvedValue(null);
+    const ledgers = [
       {
         code: "SH600000",
         name: "Example Bank",
@@ -42,7 +50,19 @@ describe("App", () => {
           },
         ],
       },
-    ]);
+    ];
+    invoke.mockImplementation((command, args) => {
+      if (command === "load_stock_ledgers") {
+        return Promise.resolve(ledgers);
+      }
+      if (command === "get_data_directory" || command === "get_default_data_directory") {
+        return Promise.resolve("C:\\Users\\Example\\Documents\\Little V");
+      }
+      if (command === "set_data_directory") {
+        return Promise.resolve((args as { directory: string }).directory);
+      }
+      return Promise.resolve(undefined);
+    });
   });
 
   it("shows the app version in a smaller font appended to the About dialog title", async () => {
@@ -568,7 +588,7 @@ describe("App", () => {
   });
 
   it("recomputes the Profit column and total after saving Stock Fee settings", async () => {
-    invoke.mockResolvedValue([
+    const ledgers = [
       {
         code: "SZ000001",
         name: "Second Bank",
@@ -585,7 +605,19 @@ describe("App", () => {
           },
         ],
       },
-    ]);
+    ];
+    invoke.mockImplementation((command, args) => {
+      if (command === "load_stock_ledgers") {
+        return Promise.resolve(ledgers);
+      }
+      if (command === "get_data_directory" || command === "get_default_data_directory") {
+        return Promise.resolve("C:\\Users\\Example\\Documents\\Little V");
+      }
+      if (command === "set_data_directory") {
+        return Promise.resolve((args as { directory: string }).directory);
+      }
+      return Promise.resolve(undefined);
+    });
     const user = userEvent.setup();
     render(<App />);
     expect(await screen.findByText("Second Bank")).toBeInTheDocument();
@@ -600,7 +632,79 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     // With a much higher fee rate, net profit drops below the previous total.
-    expect(within(menuBar).queryByText("Total profit: 39.85")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(menuBar).queryByText("Total profit: 39.85")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("saves a configured data folder without moving application settings from localStorage", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const dataDirectory = screen.getByLabelText("Data folder");
+    expect(dataDirectory).toHaveValue("C:\\Users\\Example\\Documents\\Little V");
+    await user.clear(dataDirectory);
+    await user.type(dataDirectory, "C:\\Stock Data");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("set_data_directory", { directory: "C:\\Stock Data" }),
+    );
+    expect(window.localStorage.getItem("littlev-stock-data-directory")).toBe("C:\\Stock Data");
+  });
+
+  it("reloads ledger data when the backend reports an external stock-file change", async () => {
+    let notifyLedgerChange: (() => void) | undefined;
+    let ledgers = [
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [
+          {
+            uuid: "initial",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+          },
+        ],
+      },
+    ];
+    invoke.mockImplementation((command) => {
+      if (command === "load_stock_ledgers") {
+        return Promise.resolve(ledgers);
+      }
+      if (command === "get_data_directory") {
+        return Promise.resolve("C:\\Users\\Example\\Documents\\Little V");
+      }
+      return Promise.resolve(undefined);
+    });
+    listen.mockImplementation((_event, handler) => {
+      notifyLedgerChange = handler as () => void;
+      return Promise.resolve(vi.fn());
+    });
+
+    render(<App />);
+    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    ledgers = [
+      {
+        code: "SZ000001",
+        name: "Changed Bank",
+        transactions: [
+          {
+            uuid: "changed",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+          },
+        ],
+      },
+    ];
+    notifyLedgerChange?.();
+
+    expect(await screen.findByText("Changed Bank")).toBeInTheDocument();
+    expect(screen.queryByText("Example Bank")).not.toBeInTheDocument();
   });
 
   it("discards Settings changes without applying them when Cancel is clicked", async () => {

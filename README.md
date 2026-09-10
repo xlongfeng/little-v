@@ -100,6 +100,25 @@ REQUIREMENTS.md        Living product specification
 
 ## Data storage
 
-Ledger data is stored as one JSON file per stock code in the Tauri application
-data directory (the OS-specific per-app data folder Tauri resolves at
-runtime). No data leaves the local machine.
+Ledger data is stored locally as one JSON file per stock code. By default,
+Little V uses:
+
+```text
+Documents\Little V\stocks\
+```
+
+The data folder can be changed in **Settings → Storage → Data folder**. It
+contains only stock ledger files named `<stock-code>.json`; switching folders
+switches the active ledger collection without moving or merging existing data.
+
+Application preferences and the selected data folder are stored in the
+application WebView's localStorage, not alongside the ledger files:
+
+- `littlev-stock-data-directory`
+- `littlev-language`
+- `littlev-price-refresh-seconds`
+- `littlev-profit-settings`
+
+Little V monitors the selected `stocks` folder and automatically reloads the
+trading table when stock files are added, edited, renamed, or deleted outside
+the app. No data leaves the local machine.
