@@ -66,6 +66,7 @@ td small { display: block; color: #424242; margin-top: 2px; }
   padding: 4px;
   white-space: nowrap;
 }
+.price-popup-above { top: auto; bottom: 100%; }
 .price-popup table { font-size: 13px; margin: 0 auto; }
 .price-popup th, .price-popup td { padding: 2px 8px; border: none; }
 .price-popup table + table { margin-top: 4px; }

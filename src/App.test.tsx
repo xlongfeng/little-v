@@ -427,6 +427,33 @@ describe("App", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
+  it("places a price popup above its cell when there is not enough viewport space below", async () => {
+    const originalInnerHeight = window.innerHeight;
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 100 });
+    const boundingRectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      bottom: 101,
+      height: 1,
+      left: 0,
+      right: 1,
+      top: 100,
+      width: 1,
+      x: 0,
+      y: 100,
+      toJSON: () => ({}),
+    });
+    try {
+      render(<App />);
+      expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+
+      fireEvent.mouseEnter(screen.getByText("10.00").closest("td") as HTMLElement);
+
+      expect(await screen.findByRole("tooltip")).toHaveClass("price-popup-above");
+    } finally {
+      boundingRectSpy.mockRestore();
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: originalInnerHeight });
+    }
+  });
+
   it("shows the live current price and percentage above the fluctuation ranges", async () => {
     fetchQuotes.mockResolvedValue({
       SH600000: { code: "SH600000", now: 10.42, yesterday: 9, percent: 0.1578 },

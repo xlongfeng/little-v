@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   computeNetProfit,
   DEFAULT_PROFIT_SETTINGS,
@@ -175,7 +175,9 @@ function PriceCell({
 }) {
   const { quotes } = usePriceFeed();
   const [visible, setVisible] = useState(false);
+  const [showAbove, setShowAbove] = useState(false);
   const timerRef = useRef<number | null>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
 
   function clearTimer() {
     if (timerRef.current != null) {
@@ -186,15 +188,26 @@ function PriceCell({
 
   function handleMouseEnter() {
     clearTimer();
-    timerRef.current = window.setTimeout(() => setVisible(true), HOVER_POPUP_DELAY_MS);
+    timerRef.current = window.setTimeout(() => {
+      setShowAbove(false);
+      setVisible(true);
+    }, HOVER_POPUP_DELAY_MS);
   }
 
   function handleMouseLeave() {
     clearTimer();
     setVisible(false);
+    setShowAbove(false);
   }
 
   useEffect(() => clearTimer, []);
+
+  useLayoutEffect(() => {
+    if (!visible || !popupRef.current) {
+      return;
+    }
+    setShowAbove(popupRef.current.getBoundingClientRect().bottom > window.innerHeight);
+  }, [visible]);
 
   if (price == null) {
     return <td></td>;
@@ -205,7 +218,7 @@ function PriceCell({
     <td className="price-cell" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
       {price.toFixed(precision)}
       {visible && (
-        <div className="price-popup" role="tooltip">
+        <div ref={popupRef} className={`price-popup${showAbove ? " price-popup-above" : ""}`} role="tooltip">
           {quote && (
             <CurrentQuoteRow
               quote={quote}
