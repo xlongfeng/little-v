@@ -77,34 +77,102 @@ const DOWN_STEPS = Array.from({ length: 10 }, (_, index) => -(index + 1));
 const HOVER_POPUP_DELAY_MS = 500;
 const DATA_DIRECTORY_STORAGE_KEY = "littlev-stock-data-directory";
 
-function quoteChangeClass(quote: StockQuote, referencePrice: number): string {
-  if (quote.now > referencePrice) {
+function quoteChangeClass(quote: StockQuote): string {
+  if (quote.percent > 0) {
     return "price-gain";
   }
-  if (quote.now < referencePrice) {
+  if (quote.percent < 0) {
     return "price-loss";
   }
   return "";
 }
 
-function formatQuoteChange(quote: StockQuote, referencePrice: number, precision: number): string {
-  const change = quote.now - referencePrice;
+function formatQuotePercent(quote: StockQuote): string {
+  const percent = quote.percent * 100;
+  return `${percent > 0 ? "+" : ""}${percent.toFixed(2)}%`;
+}
+
+function referenceChange(quote: StockQuote, referencePrice: number, isSellPrice: boolean): number {
+  return isSellPrice ? referencePrice - quote.now : quote.now - referencePrice;
+}
+
+function formatReferenceChange(
+  quote: StockQuote,
+  referencePrice: number,
+  isSellPrice: boolean,
+  precision: number,
+): string {
+  const change = referenceChange(quote, referencePrice, isSellPrice);
   const percent = referencePrice !== 0 ? (change / referencePrice) * 100 : 0;
   const amount = `${change > 0 ? "+" : ""}${change.toFixed(precision)}`;
   const percentText = `${percent > 0 ? "+" : ""}${percent.toFixed(2)}%`;
   return `${amount} / ${percentText}`;
 }
 
-function CurrentQuoteRow({ quote, referencePrice, precision }: { quote: StockQuote; referencePrice: number; precision: number }) {
+function formatReferenceProfit(
+  quote: StockQuote,
+  referencePrice: number,
+  isSellPrice: boolean,
+  quantity: number | null | undefined,
+): string {
+  if (quantity == null) {
+    return "";
+  }
+  const profit = referenceChange(quote, referencePrice, isSellPrice) * quantity;
+  return `${profit > 0 ? "+" : ""}${profit.toFixed(2)}`;
+}
+
+function referenceChangeClass(quote: StockQuote, referencePrice: number, isSellPrice: boolean): string {
+  if (referenceChange(quote, referencePrice, isSellPrice) > 0) {
+    return "price-gain";
+  }
+  if (referenceChange(quote, referencePrice, isSellPrice) < 0) {
+    return "price-loss";
+  }
+  return "";
+}
+
+function CurrentQuoteRow({
+  quote,
+  referencePrice,
+  isSellPrice,
+  quantity,
+  precision,
+}: {
+  quote: StockQuote;
+  referencePrice: number;
+  isSellPrice: boolean;
+  quantity: number | null | undefined;
+  precision: number;
+}) {
   return (
-    <div className={`current-quote ${quoteChangeClass(quote, referencePrice)}`}>
-      <span className="current-quote-price">{quote.now.toFixed(precision)}</span>
-      <span className="current-quote-change">{formatQuoteChange(quote, referencePrice, precision)}</span>
+    <div className="current-quote">
+      <span className={`current-quote-market ${quoteChangeClass(quote)}`}>
+        {quote.now.toFixed(precision)} / {formatQuotePercent(quote)}
+      </span>
+      <span className={`current-quote-reference ${referenceChangeClass(quote, referencePrice, isSellPrice)}`}>
+        <span className="current-quote-reference-profit">
+          {formatReferenceProfit(quote, referencePrice, isSellPrice, quantity)}
+        </span>
+        <span className="current-quote-reference-change">
+          {formatReferenceChange(quote, referencePrice, isSellPrice, precision)}
+        </span>
+      </span>
     </div>
   );
 }
 
-function PriceCell({ price, code }: { price: number | null | undefined; code: string }) {
+function PriceCell({
+  price,
+  code,
+  quantity,
+  isSellPrice,
+}: {
+  price: number | null | undefined;
+  code: string;
+  quantity: number | null | undefined;
+  isSellPrice: boolean;
+}) {
   const { quotes } = usePriceFeed();
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<number | null>(null);
@@ -138,7 +206,15 @@ function PriceCell({ price, code }: { price: number | null | undefined; code: st
       {price.toFixed(precision)}
       {visible && (
         <div className="price-popup" role="tooltip">
-          {quote && <CurrentQuoteRow quote={quote} referencePrice={price} precision={precision} />}
+          {quote && (
+            <CurrentQuoteRow
+              quote={quote}
+              referencePrice={price}
+              isSellPrice={isSellPrice}
+              quantity={quantity}
+              precision={precision}
+            />
+          )}
           <table>
             <thead>
               <tr>
@@ -592,9 +668,9 @@ function AppContent() {
                   )}
                 </td>
                 <td>{row.quantity ?? ""}</td>
-                <PriceCell price={row.buyPrice} code={row.code} />
+                <PriceCell price={row.buyPrice} code={row.code} quantity={row.quantity} isSellPrice={false} />
                 <td>{row.buyDate ?? ""}</td>
-                <PriceCell price={row.sellPrice} code={row.code} />
+                <PriceCell price={row.sellPrice} code={row.code} quantity={row.quantity} isSellPrice />
                 <td>{row.sellDate ?? ""}</td>
                 <td>{formatNetProfit(row, profitSettings)}</td>
                 <td className="row-actions">

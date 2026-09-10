@@ -427,9 +427,7 @@ describe("App", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
-  it("shows the live current price and change above the fluctuation ranges, computed against the hovered price", async () => {
-    // yesterday's close (9.00) differs from the hovered buy price (10.00) to
-    // prove the change is computed against the hovered price, not yesterday's close.
+  it("shows the live current price and percentage above the fluctuation ranges", async () => {
     fetchQuotes.mockResolvedValue({
       SH600000: { code: "SH600000", now: 10.42, yesterday: 9, percent: 0.1578 },
     });
@@ -439,9 +437,42 @@ describe("App", () => {
     fireEvent.mouseEnter(screen.getByText("10.00").closest("td") as HTMLElement);
     const popup = await screen.findByRole("tooltip");
 
-    expect(popup.querySelector(".current-quote-price")).toHaveTextContent("10.42");
-    expect(popup.querySelector(".current-quote-change")).toHaveTextContent("+0.42 / +4.20%");
-    expect(popup.querySelector(".current-quote")).toHaveClass("price-gain");
+    expect(popup.querySelector(".current-quote-market")).toHaveTextContent("10.42 / +15.78%");
+    expect(popup.querySelector(".current-quote-market")).toHaveClass("price-gain");
+    expect(popup.querySelector(".current-quote-reference-profit")).toHaveTextContent("+42.00");
+    expect(popup.querySelector(".current-quote-reference-change")).toHaveTextContent("+0.42 / +4.20%");
+    expect(popup.querySelector(".current-quote-reference")).toHaveClass("price-gain");
+  });
+
+  it("calculates sell-price reference changes from the transaction price minus the live price", async () => {
+    invoke.mockResolvedValue([
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [
+          {
+            uuid: "closed",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            buyPrice: 10,
+            sellPrice: 12,
+          },
+        ],
+      },
+    ]);
+    fetchQuotes.mockResolvedValue({
+      SH600000: { code: "SH600000", now: 10.42, yesterday: 9, percent: 0.1578 },
+    });
+    render(<App />);
+    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+
+    fireEvent.mouseEnter(screen.getByText("12.00").closest("td") as HTMLElement);
+    const popup = await screen.findByRole("tooltip");
+
+    expect(popup.querySelector(".current-quote-reference-profit")).toHaveTextContent("+158.00");
+    expect(popup.querySelector(".current-quote-reference-change")).toHaveTextContent("+1.58 / +13.17%");
+    expect(popup.querySelector(".current-quote-reference")).toHaveClass("price-gain");
   });
 
   it("renders closed transactions with a gray font color", async () => {
