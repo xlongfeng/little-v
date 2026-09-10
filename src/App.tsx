@@ -682,9 +682,9 @@ function AppContent() {
                 </td>
                 <td>{row.quantity ?? ""}</td>
                 <PriceCell price={row.buyPrice} code={row.code} quantity={row.quantity} isSellPrice={false} />
-                <td>{row.buyDate ?? ""}</td>
+                <td className={row.buyPrice != null && !row.buyDate ? "missing-date" : undefined}>{row.buyDate ?? ""}</td>
                 <PriceCell price={row.sellPrice} code={row.code} quantity={row.quantity} isSellPrice />
-                <td>{row.sellDate ?? ""}</td>
+                <td className={row.sellPrice != null && !row.sellDate ? "missing-date" : undefined}>{row.sellDate ?? ""}</td>
                 <td>{formatNetProfit(row, profitSettings)}</td>
                 <td className="row-actions">
                   <button

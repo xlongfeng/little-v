@@ -1195,6 +1195,7 @@ describe("App", () => {
     fireEvent.change(screen.getByLabelText("Note"), {
       target: { value: "Watch earnings guidance\nCheck next quarter" },
     });
+
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(invoke).toHaveBeenCalledWith("create_transaction", {
@@ -1204,6 +1205,35 @@ describe("App", () => {
         note: "Watch earnings guidance\nCheck next quarter",
       }),
     });
+  });
+
+  it("highlights a missing buy or sell date when its price is present", async () => {
+    invoke.mockResolvedValue([
+      {
+        code: "SH600001",
+        name: "Missing Buy Date",
+        transactions: [{ uuid: "buy", createDate: "1", modifyDate: "1", buyPrice: 10 }],
+      },
+      {
+        code: "SZ000001",
+        name: "Missing Sell Date",
+        transactions: [{ uuid: "sell", createDate: "2", modifyDate: "2", sellPrice: 10 }],
+      },
+      {
+        code: "SH600002",
+        name: "Complete Dates",
+        transactions: [{ uuid: "complete", createDate: "3", modifyDate: "3", buyPrice: 10, buyDate: "2026-09-01" }],
+      },
+    ]);
+    render(<App />);
+
+    const buyRow = (await screen.findByText("Missing Buy Date")).closest("tr") as HTMLTableRowElement;
+    const sellRow = screen.getByText("Missing Sell Date").closest("tr") as HTMLTableRowElement;
+    const completeRow = screen.getByText("Complete Dates").closest("tr") as HTMLTableRowElement;
+
+    expect(buyRow.cells[3]).toHaveClass("missing-date");
+    expect(sellRow.cells[5]).toHaveClass("missing-date");
+    expect(completeRow.cells[3]).not.toHaveClass("missing-date");
   });
 
   it("requires a stock to be selected before saving", async () => {

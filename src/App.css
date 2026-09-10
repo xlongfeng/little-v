@@ -52,6 +52,7 @@ tbody tr:hover { background: #e8f0fb; }
 tbody tr.closed-row { color: #808080; }
 td small { display: block; color: #424242; margin-top: 2px; }
 .comment-indicator { display: inline-block; margin-left: 6px; color: #185abd; cursor: help; font-size: 13px; }
+.missing-date { background: #fff4ce; }
 .price-cell.price-cell { position: relative; overflow: visible; cursor: default; }
 .price-popup {
   position: absolute;
