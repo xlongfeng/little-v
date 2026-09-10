@@ -92,6 +92,10 @@ function formatQuotePercent(quote: StockQuote): string {
   return `${percent > 0 ? "+" : ""}${percent.toFixed(2)}%`;
 }
 
+function displayStockName(name: string): string {
+  return name.replace(/(?:ETF|LOF).*$/i, "").trimEnd();
+}
+
 function referenceChange(quote: StockQuote, referencePrice: number, isSellPrice: boolean): number {
   return isSellPrice ? referencePrice - quote.now : quote.now - referencePrice;
 }
@@ -261,6 +265,70 @@ function PriceCell({
             </tbody>
           </table>
         </div>
+      )}
+    </td>
+  );
+}
+
+function NameCell({ row }: { row: TableRow }) {
+  const { quotes } = usePriceFeed();
+  const { t } = useLanguage();
+  const [visible, setVisible] = useState(false);
+  const [showAbove, setShowAbove] = useState(false);
+  const timerRef = useRef<number | null>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const quote = quotes[row.code];
+
+  function clearTimer() {
+    if (timerRef.current != null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }
+
+  function handleMouseEnter() {
+    clearTimer();
+    timerRef.current = window.setTimeout(() => {
+      setShowAbove(false);
+      setVisible(true);
+    }, HOVER_POPUP_DELAY_MS);
+  }
+
+  function handleMouseLeave() {
+    clearTimer();
+    setVisible(false);
+    setShowAbove(false);
+  }
+
+  useEffect(() => clearTimer, []);
+
+  useLayoutEffect(() => {
+    if (!visible || !tooltipRef.current) {
+      return;
+    }
+    setShowAbove(tooltipRef.current.getBoundingClientRect().bottom > window.innerHeight);
+  }, [visible]);
+
+  return (
+    <td className="name-cell">
+      <span className="stock-name" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+        {displayStockName(row.name)}
+        {visible && (
+          <div ref={tooltipRef} className={`name-tooltip${showAbove ? " name-tooltip-above" : ""}`} role="tooltip">
+            <div>{row.name}</div>
+            <div>{row.code}</div>
+            {quote && (
+              <div className={quoteChangeClass(quote)}>
+                {quote.now.toFixed(pricePrecision(row.code))} / {formatQuotePercent(quote)}
+              </div>
+            )}
+          </div>
+        )}
+      </span>
+      {row.note && (
+        <span className="comment-indicator" title={row.note} aria-label={t("table.note", { note: row.note })}>
+          💬
+        </span>
       )}
     </td>
   );
@@ -672,14 +740,7 @@ function AppContent() {
           <tbody>
             {rows.map((row) => (
               <tr key={row.key} className={isRowClosed(row) ? "closed-row" : undefined} onDoubleClick={() => setEditingRow(row)}>
-                <td>
-                  {row.name}
-                  {row.note && (
-                    <span className="comment-indicator" title={row.note} aria-label={t("table.note", { note: row.note })}>
-                      💬
-                    </span>
-                  )}
-                </td>
+                <NameCell row={row} />
                 <td>{row.quantity ?? ""}</td>
                 <PriceCell price={row.buyPrice} code={row.code} quantity={row.quantity} isSellPrice={false} />
                 <td className={row.buyPrice != null && !row.buyDate ? "missing-date" : undefined}>{row.buyDate ?? ""}</td>

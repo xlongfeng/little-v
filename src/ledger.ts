@@ -99,6 +99,8 @@ export function toTableRows(ledgers: StockLedger[]): TableRow[] {
       if (nameCompare !== 0) {
         return nameCompare;
       }
-      return (left.buyDate ?? "").localeCompare(right.buyDate ?? "");
+      const leftPrice = left.buyPrice ?? left.sellPrice ?? Number.NEGATIVE_INFINITY;
+      const rightPrice = right.buyPrice ?? right.sellPrice ?? Number.NEGATIVE_INFINITY;
+      return leftPrice - rightPrice;
     });
 }

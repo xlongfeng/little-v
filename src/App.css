@@ -45,14 +45,35 @@ table { width: 100%; border-collapse: collapse; text-align: left; font-size: 15p
 .col-sell-date { width: 12%; }
 .col-profit { width: 10%; }
 .col-actions { width: 8%; }
-th { position: sticky; top: 0; padding: 2px 14px; color: #808080; background: #f3f3f3; font-size: 15px; font-weight: 700; letter-spacing: .01em; border: 1px solid #c0c0c0; }
-td { padding: 2px 14px; border: 1px solid #d0d0d0; }
+th { position: sticky; top: 0; padding: 2px 14px; color: #808080; background: #f3f3f3; font-size: 15px; font-weight: 700; letter-spacing: .01em; border-bottom: 1px solid #c0c0c0; }
+td { padding: 2px 14px; border-bottom: 1px solid #d0d0d0; }
 tbody tr:nth-child(even) { background: #f7f7f7; }
 tbody tr:hover { background: #e8f0fb; }
 tbody tr.closed-row { color: #808080; }
 td small { display: block; color: #424242; margin-top: 2px; }
-.comment-indicator { display: inline-block; margin-left: 6px; color: #185abd; cursor: help; font-size: 13px; }
+.comment-indicator { flex-shrink: 0; margin-left: auto; color: #185abd; cursor: help; font-size: 13px; }
 .missing-date { background: #fff4ce; }
+.name-cell.name-cell { display: flex; align-items: center; gap: 6px; overflow: visible; cursor: default; }
+.stock-name { position: relative; min-width: 0; overflow: visible; text-overflow: ellipsis; }
+.name-tooltip {
+  position: absolute;
+  z-index: 3;
+  top: 100%;
+  left: 0;
+  min-width: max-content;
+  padding: 4px 6px;
+  color: #4d4d4d;
+  background: #fff;
+  border: 1px solid #b3b3b3;
+  border-radius: 2px;
+  box-shadow: 0 4px 10px #00000026;
+  font-size: 13px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.name-tooltip-above { top: auto; bottom: 100%; }
+.name-tooltip .price-gain { color: #d13438; }
+.name-tooltip .price-loss { color: #107c10; }
 .price-cell.price-cell { position: relative; overflow: visible; cursor: default; }
 .price-popup {
   position: absolute;

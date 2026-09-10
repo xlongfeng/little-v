@@ -390,6 +390,68 @@ describe("App", () => {
     expect(screen.getByText("3.456")).toBeInTheDocument();
   });
 
+  it("omits ETF and LOF from displayed names and shows full name, code, and quote on hover", async () => {
+    invoke.mockResolvedValue([
+      {
+        code: "SH510300",
+        name: "Example ETF",
+        transactions: [{ uuid: "etf", createDate: "1", modifyDate: "1" }],
+      },
+    ]);
+    fetchQuotes.mockResolvedValue({
+      SH510300: { code: "SH510300", now: 3.456, yesterday: 3.4, percent: 0.0165 },
+    });
+    render(<App />);
+
+    const name = await screen.findByText("Example");
+    expect(screen.queryByText("Example ETF")).not.toBeInTheDocument();
+
+    fireEvent.mouseEnter(name);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(within(tooltip).getByText("Example ETF")).toBeInTheDocument();
+    expect(within(tooltip).getByText("SH510300")).toBeInTheDocument();
+    expect(within(tooltip).getByText("3.456 / +1.65%")).toHaveClass("price-gain");
+  });
+
+  it("right-aligns the note icon and does not show stock details when it is hovered", async () => {
+    invoke.mockResolvedValue([
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [{ uuid: "note", createDate: "1", modifyDate: "1", note: "Review before selling" }],
+      },
+    ]);
+    render(<App />);
+
+    const note = await screen.findByLabelText("Note: Review before selling");
+    expect(note).toHaveAttribute("title", "Review before selling");
+    expect(note).toHaveClass("comment-indicator");
+    fireEvent.mouseEnter(note);
+    await new Promise((resolve) => window.setTimeout(resolve, 550));
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("omits ETF or LOF and the remaining name text", async () => {
+    invoke.mockResolvedValue([
+      {
+        code: "SH510300",
+        name: "Example ETF Fund",
+        transactions: [{ uuid: "etf", createDate: "1", modifyDate: "1" }],
+      },
+      {
+        code: "SZ160000",
+        name: "Sample LOF Fund",
+        transactions: [{ uuid: "lof", createDate: "2", modifyDate: "2" }],
+      },
+    ]);
+    render(<App />);
+
+    expect(await screen.findByText("Example")).toBeInTheDocument();
+    expect(screen.getByText("Sample")).toBeInTheDocument();
+    expect(screen.queryByText("Example ETF Fund")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sample LOF Fund")).not.toBeInTheDocument();
+  });
+
   it("shows a fluctuation range popup after hovering a price cell for a moment", async () => {
     invoke.mockResolvedValue([
       {

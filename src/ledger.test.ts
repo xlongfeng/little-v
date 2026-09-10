@@ -37,13 +37,13 @@ const ledger: StockLedger = {
 describe("ledger projections", () => {
   it("projects each transaction into a table row as-is", () => {
     expect(toTableRows([ledger])).toEqual([
-      expect.objectContaining({ key: "open-sell", buyPrice: undefined, sellPrice: 11 }),
-      expect.objectContaining({ key: "closed-1", buyPrice: 10, sellPrice: 12 }),
       expect.objectContaining({ key: "open-buy", buyPrice: 8, sellPrice: undefined }),
+      expect.objectContaining({ key: "closed-1", buyPrice: 10, sellPrice: 12 }),
+      expect.objectContaining({ key: "open-sell", buyPrice: undefined, sellPrice: 11 }),
     ]);
   });
 
-  it("sorts rows by stock name then ascending buy date", () => {
+  it("sorts rows by stock name then ascending buy price or sell price", () => {
     const otherLedger: StockLedger = {
       code: "SZ000001",
       name: "Alpha Bank",
@@ -61,6 +61,7 @@ describe("ledger projections", () => {
 
     const rows = toTableRows([ledger, otherLedger]);
     expect(rows[0].key).toBe("alpha-1");
+    expect(rows.slice(1).map((row) => row.key)).toEqual(["open-buy", "closed-1", "open-sell"]);
   });
 });
 
