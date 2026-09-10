@@ -93,10 +93,17 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | Menu item | Behavior |
 | --- | --- |
 | **Create** | Opens the transaction creation dialog |
-| **Settings** | Shows a placeholder dialog for a future release |
+| **Settings** | Shows a **Language** selector (English / 简体中文) |
 | **About** | Shows the dialog title **About Little V** followed by the app version (**Version `X.Y.Z`**) in a smaller font, and a short application description |
 
 At the far right of the menu bar, a **Total profit** indicator shows the sum of Profit (see §6.3 for the formula) across all currently visible rows (i.e. after applying the Filters).
+
+### 6.1.1 Language / localization
+
+- The app supports **English** and **Simplified Chinese** (`zh_cn`).
+- On first launch, the language preference is **Default**, which follows the OS/browser language (`navigator.language`): any locale starting with `zh` resolves to Simplified Chinese, everything else resolves to English.
+- The **Settings** dialog's **Language** dropdown offers **System Default**, **English**, and **简体中文**; choosing English or Chinese explicitly overrides the OS language, while choosing System Default clears the override and resumes following the OS language. The entire UI (menu, filters, table headers, dialogs, validation messages) updates immediately on change.
+- An explicit language choice is persisted in local storage (`littlev-language`) and takes precedence over the OS default on subsequent launches; selecting Default removes the stored override.
 
 ### 6.2 Filters
 

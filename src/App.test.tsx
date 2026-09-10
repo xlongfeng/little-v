@@ -12,9 +12,13 @@ vi.mock("./stockApi", () => ({ searchStocks }));
 const today = () => new Date().toISOString().slice(0, 10);
 
 describe("App", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+  });
 
   beforeEach(() => {
+    window.localStorage.clear();
     invoke.mockReset();
     searchStocks.mockReset();
     invoke.mockResolvedValue([
@@ -47,6 +51,53 @@ describe("App", () => {
     expect(versionTag).toHaveClass("version-tag");
     expect(within(dialog).getByRole("heading")).toHaveTextContent(/^About Little V Version \d+\.\d+\.\d+$/);
     expect(within(dialog).getByText("A local stock transaction ledger.")).toBeInTheDocument();
+  });
+
+  it("defaults to Chinese when the OS/browser language is Chinese", async () => {
+    const languageSpy = vi.spyOn(window.navigator, "language", "get").mockReturnValue("zh-CN");
+    render(<App />);
+    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: "新建" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "设置" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关于" })).toBeInTheDocument();
+
+    languageSpy.mockRestore();
+  });
+
+  it("lets the user switch language in Settings and persists the choice", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.selectOptions(screen.getByLabelText("Language"), "zh_cn");
+
+    expect(screen.getByRole("button", { name: "新建" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
+    expect(window.localStorage.getItem("littlev-language")).toBe("zh_cn");
+  });
+
+  it("offers a Default option that reverts to following the OS language", async () => {
+    const user = userEvent.setup();
+    const languageSpy = vi.spyOn(window.navigator, "language", "get").mockReturnValue("zh-CN");
+    render(<App />);
+    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+
+    // OS is Chinese, so the app should start in Chinese with "system" preselected.
+    await user.click(screen.getByRole("button", { name: "设置" }));
+    expect(screen.getByLabelText("语言")).toHaveValue("system");
+
+    // Explicitly switch to English, then back to Default.
+    await user.selectOptions(screen.getByLabelText("语言"), "en");
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(window.localStorage.getItem("littlev-language")).toBe("en");
+
+    await user.selectOptions(screen.getByLabelText("Language"), "system");
+    expect(screen.getByRole("button", { name: "设置" })).toBeInTheDocument();
+    expect(window.localStorage.getItem("littlev-language")).toBeNull();
+
+    languageSpy.mockRestore();
   });
 
   it("filters the combined ledger table by checked stock names", async () => {

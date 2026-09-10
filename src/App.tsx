@@ -3,6 +3,8 @@ import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "reac
 import { computeNetProfit, pricePrecision, toTableRows, type StockLedger, type StockOption, type TableRow } from "./ledger";
 import { searchStocks } from "./stockApi";
 import { version as appVersion } from "../package.json";
+import { formatRecordCount, isLanguagePreference, useLanguage, type LanguagePreference } from "./i18n";
+import { LanguageProvider } from "./LanguageProvider";
 import "./App.css";
 
 type StatusFilter = "all" | "open" | "closed";
@@ -164,6 +166,15 @@ function formFromRow(row: TableRow): TransactionForm {
 }
 
 function App() {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
+  );
+}
+
+function AppContent() {
+  const { language, languagePreference, setLanguagePreference, t } = useLanguage();
   const [ledgers, setLedgers] = useState<StockLedger[]>([]);
   const [excludedFilterNames, setExcludedFilterNames] = useState<string[]>([]);
   const [nameFilterOpen, setNameFilterOpen] = useState(false);
@@ -267,38 +278,40 @@ function App() {
     setExcludedFilterNames(checked ? [] : filterNames);
   }
 
+  const [deleteConfirmBefore, deleteConfirmAfter] = t("deleteDialog.confirm").split("{name}");
+
   return (
     <main className="app-shell">
       <header className="menu-bar">
         <div className="brand">Little V</div>
-        <nav aria-label="Application menu">
-          <button type="button" onClick={() => setDialogOpen(true)}>Create</button>
-          <button type="button" onClick={() => setSettingsOpen(true)}>Settings</button>
-          <button type="button" onClick={() => setAboutOpen(true)}>About</button>
+        <nav aria-label={t("table.applicationMenu")}>
+          <button type="button" onClick={() => setDialogOpen(true)}>{t("menu.create")}</button>
+          <button type="button" onClick={() => setSettingsOpen(true)}>{t("menu.settings")}</button>
+          <button type="button" onClick={() => setAboutOpen(true)}>{t("menu.about")}</button>
         </nav>
-        <span className="total-profit">Total profit: {formatTotalProfit(rows)}</span>
+        <span className="total-profit">{t("totalProfit", { value: formatTotalProfit(rows) })}</span>
       </header>
 
-      <section className="filter-bar" aria-label="Record controls">
-        <span className="filter-label">Filters</span>
+      <section className="filter-bar" aria-label={t("table.recordControls")}>
+        <span className="filter-label">{t("filters.label")}</span>
         <div className="name-filter" ref={nameFilterRef}>
           <button
             type="button"
-            aria-label="Names"
+            aria-label={t("filters.names")}
             aria-expanded={nameFilterOpen}
             onClick={() => setNameFilterOpen((open) => !open)}
           >
-            {filterNames.length === selectedFilterCount ? "All" : `${selectedFilterCount} selected`}
+            {filterNames.length === selectedFilterCount ? t("filters.all") : t("filters.selected", { count: selectedFilterCount })}
           </button>
           {nameFilterOpen && (
-            <div className="name-filter-menu" role="group" aria-label="Filter by names">
+            <div className="name-filter-menu" role="group" aria-label={t("filters.filterByNames")}>
               <label className="select-all-filter">
                 <input
                   type="checkbox"
                   checked={filterNames.length > 0 && selectedFilterCount === filterNames.length}
                   onChange={(event) => toggleAllFilterNames(event.target.checked)}
                 />
-                All
+                {t("filters.all")}
               </label>
               {filterNames.map((name) => (
                 <label key={name}>
@@ -310,44 +323,54 @@ function App() {
                   {name}
                 </label>
               ))}
-              {!filterNames.length && <p>No names available</p>}
+              {!filterNames.length && <p>{t("filters.noNames")}</p>}
             </div>
           )}
         </div>
         <label className="inline-filter">
-          Status
-          <select aria-label="Status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
-            <option value="all">All</option>
-            <option value="open">Open only</option>
-            <option value="closed">Closed only</option>
+          {t("filters.status")}
+          <select aria-label={t("filters.status")} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+            <option value="all">{t("filters.all")}</option>
+            <option value="open">{t("filters.statusOpen")}</option>
+            <option value="closed">{t("filters.statusClosed")}</option>
           </select>
         </label>
         <label className="inline-filter">
-          Period
-          <select aria-label="Period" value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as PeriodFilter)}>
-            <option value="all">All</option>
-            <option value="6m">Last 6 months</option>
-            <option value="1y">Last year</option>
-            <option value="2y">Last 2 years</option>
+          {t("filters.period")}
+          <select aria-label={t("filters.period")} value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as PeriodFilter)}>
+            <option value="all">{t("filters.all")}</option>
+            <option value="6m">{t("filters.period6m")}</option>
+            <option value="1y">{t("filters.period1y")}</option>
+            <option value="2y">{t("filters.period2y")}</option>
           </select>
         </label>
-        <span>{rows.length} record{rows.length === 1 ? "" : "s"}</span>
+        <span>{formatRecordCount(language, rows.length)}</span>
       </section>
 
-      {loadError && <p className="error-banner" role="alert">Could not load records: {loadError}</p>}
+      {loadError && <p className="error-banner" role="alert">{t("loadError", { error: loadError })}</p>}
 
-      <section className="table-wrapper" aria-label="Trading records">
+      <section className="table-wrapper" aria-label={t("table.tradingRecords")}>
         <table>
+          <colgroup>
+            <col className="col-name" />
+            <col className="col-quantity" />
+            <col className="col-buy-price" />
+            <col className="col-buy-date" />
+            <col className="col-sell-price" />
+            <col className="col-sell-date" />
+            <col className="col-profit" />
+            <col className="col-actions" />
+          </colgroup>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Quantity</th>
-              <th>Buy Price</th>
-              <th>Buy Date</th>
-              <th>Sell Price</th>
-              <th>Sell Date</th>
-              <th>Profit</th>
-              <th>Actions</th>
+              <th>{t("table.name")}</th>
+              <th>{t("table.quantity")}</th>
+              <th>{t("table.buyPrice")}</th>
+              <th>{t("table.buyDate")}</th>
+              <th>{t("table.sellPrice")}</th>
+              <th>{t("table.sellDate")}</th>
+              <th>{t("table.profit")}</th>
+              <th>{t("table.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -356,7 +379,7 @@ function App() {
                 <td>
                   {row.name}
                   {row.note && (
-                    <span className="comment-indicator" title={row.note} aria-label={`Note: ${row.note}`}>
+                    <span className="comment-indicator" title={row.note} aria-label={t("table.note", { note: row.note })}>
                       💬
                     </span>
                   )}
@@ -371,8 +394,8 @@ function App() {
                   <button
                     type="button"
                     className="icon-button delete-row"
-                    aria-label="Delete transaction"
-                    title="Delete transaction"
+                    aria-label={t("table.deleteTransaction")}
+                    title={t("table.deleteTransaction")}
                     onClick={() => {
                       setDeleteError("");
                       setPendingDelete({ code: row.code, uuid: row.key, name: row.name });
@@ -385,7 +408,7 @@ function App() {
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={8} className="empty-state">No trading records yet. Use Create to add one.</td>
+                <td colSpan={8} className="empty-state">{t("table.noRecords")}</td>
               </tr>
             )}
           </tbody>
@@ -415,9 +438,9 @@ function App() {
       )}
       {pendingDelete && (
         <div className="dialog-backdrop" role="presentation">
-          <section className="dialog" role="dialog" aria-label="Delete transaction">
+          <section className="dialog" role="dialog" aria-label={t("deleteDialog.title")}>
             <div className="dialog-heading">
-              <h2>Delete transaction</h2>
+              <h2>{t("deleteDialog.title")}</h2>
               <button
                 type="button"
                 className="icon-button"
@@ -425,13 +448,13 @@ function App() {
                   setPendingDelete(null);
                   setDeleteError("");
                 }}
-                aria-label="Close"
+                aria-label={t("dialog.close")}
               >
                 ×
               </button>
             </div>
-            <p>Are you sure you want to delete this transaction for <strong>{pendingDelete.name}</strong>? This cannot be undone.</p>
-            {deleteError && <p className="field-error" role="alert">Could not delete transaction: {deleteError}</p>}
+            <p>{deleteConfirmBefore}<strong>{pendingDelete.name}</strong>{deleteConfirmAfter}</p>
+            {deleteError && <p className="field-error" role="alert">{t("deleteDialog.error", { error: deleteError })}</p>}
             <div className="dialog-actions">
               <button
                 type="button"
@@ -440,10 +463,10 @@ function App() {
                   setDeleteError("");
                 }}
               >
-                Cancel
+                {t("deleteDialog.cancel")}
               </button>
               <button type="button" className="primary danger" onClick={() => void confirmDeleteTransaction()} disabled={deleting}>
-                {deleting ? "Deleting…" : "Delete"}
+                {deleting ? t("deleteDialog.deleting") : t("deleteDialog.delete")}
               </button>
             </div>
           </section>
@@ -451,16 +474,35 @@ function App() {
       )}
       {aboutOpen && (
         <InfoDialog
-          title={<>About Little V <span className="version-tag">Version {appVersion}</span></>}
-          ariaLabel={`About Little V Version ${appVersion}`}
+          title={<>{t("about.title")} <span className="version-tag">{t("about.version", { version: appVersion })}</span></>}
+          ariaLabel={`${t("about.title")} ${t("about.version", { version: appVersion })}`}
           onClose={() => setAboutOpen(false)}
         >
-          <p>A local stock transaction ledger.</p>
+          <p>{t("about.description")}</p>
         </InfoDialog>
       )}
       {settingsOpen && (
-        <InfoDialog title="Settings" onClose={() => setSettingsOpen(false)}>
-          <p>Settings will be available in a future release.</p>
+        <InfoDialog title={t("settings.title")} onClose={() => setSettingsOpen(false)}>
+          <fieldset className="settings-group">
+            <legend>{t("settings.general")}</legend>
+            <div className="settings-grid">
+              <label htmlFor="settings-language">{t("settings.language")}</label>
+              <select
+                id="settings-language"
+                aria-label={t("settings.language")}
+                value={languagePreference}
+                onChange={(event) => {
+                  if (isLanguagePreference(event.target.value)) {
+                    setLanguagePreference(event.target.value as LanguagePreference);
+                  }
+                }}
+              >
+                <option value="system">{t("settings.languageDefault")}</option>
+                <option value="en">{t("settings.languageEnglish")}</option>
+                <option value="zh_cn">{t("settings.languageZhCn")}</option>
+              </select>
+            </div>
+          </fieldset>
         </InfoDialog>
       )}
     </main>
@@ -478,6 +520,7 @@ function TransactionDialog({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const { t } = useLanguage();
   const [form, setForm] = useState(() => (editing ? formFromRow(editing) : initialForm()));
   const [stockQuery, setStockQuery] = useState(() => (editing ? `${editing.name} (${editing.code})` : ""));
   const [searchResults, setSearchResults] = useState<StockOption[] | null>(null);
@@ -523,7 +566,7 @@ function TransactionDialog({
       setStockListOpen(true);
     } catch (lookupError) {
       setSearchResults([]);
-      setSearchError(`Stock search is unavailable: ${String(lookupError)}`);
+      setSearchError(t("dialog.stockSearchUnavailable", { error: String(lookupError) }));
       setStockListOpen(true);
     }
   }
@@ -537,22 +580,22 @@ function TransactionDialog({
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!form.stock) {
-      setError("Select a stock.");
+      setError(t("dialog.selectStock"));
       return;
     }
     const hasQuantity = form.quantity.trim() !== "";
     const quantity = hasQuantity ? Number(form.quantity) : null;
     if (hasQuantity && quantity !== null) {
       if (!Number.isFinite(quantity) || quantity <= 0) {
-        setError("Quantity must be greater than zero.");
+        setError(t("dialog.quantityPositive"));
         return;
       }
       if (!Number.isInteger(quantity)) {
-        setError("Quantity must be a whole number.");
+        setError(t("dialog.quantityWholeNumber"));
         return;
       }
       if (quantity % 100 !== 0) {
-        setError("Quantity must be a multiple of 100.");
+        setError(t("dialog.quantityMultiple100"));
         return;
       }
     }
@@ -601,9 +644,9 @@ function TransactionDialog({
 
   return (
     <div className="dialog-backdrop" role="presentation">
-      <form className="dialog" onSubmit={submit} aria-label={editing ? "Edit transaction" : "Create transaction"} noValidate>
-        <div className="dialog-heading"><h2>{editing ? "Edit transaction" : "Create transaction"}</h2><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></div>
-        <label>Stock
+      <form className="dialog" onSubmit={submit} aria-label={editing ? t("dialog.editTransaction") : t("dialog.createTransaction")} noValidate>
+        <div className="dialog-heading"><h2>{editing ? t("dialog.editTransaction") : t("dialog.createTransaction")}</h2><button type="button" className="icon-button" onClick={onClose} aria-label={t("dialog.close")}>×</button></div>
+        <label>{t("dialog.stock")}
           <div className="stock-combobox" ref={stockComboboxRef}>
             <input
               value={stockQuery}
@@ -619,9 +662,9 @@ function TransactionDialog({
                   void lookup();
                 }
               }}
-              placeholder="Select or search a stock"
+              placeholder={t("dialog.stockPlaceholder")}
               role="combobox"
-              aria-label="Stock"
+              aria-label={t("dialog.stock")}
               aria-expanded={stockListOpen}
               aria-controls="stock-options"
               aria-autocomplete="list"
@@ -630,7 +673,7 @@ function TransactionDialog({
               <button
                 type="button"
                 className="combobox-toggle"
-                aria-label="Show existing stocks"
+                aria-label={t("dialog.showExistingStocks")}
                 onClick={() => {
                   setSearchResults(null);
                   setSearchError("");
@@ -649,24 +692,24 @@ function TransactionDialog({
                     </button>
                   </li>
                 ))}
-                {!choices.length && <li className="no-options">No matching stocks found.</li>}
+                {!choices.length && <li className="no-options">{t("dialog.noMatchingStocks")}</li>}
               </ul>
             )}
           </div>
         </label>
         {searchError && <p className="field-error" role="alert">{searchError}</p>}
-        <label>Quantity<input type="number" min="0" step="100" inputMode="numeric" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value.split(".")[0] })} /></label>
+        <label>{t("dialog.quantity")}<input type="number" min="0" step="100" inputMode="numeric" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value.split(".")[0] })} /></label>
         <div className="two-columns">
-          <label>Buy price<input type="number" min="0.01" step={priceStep} value={form.buyPrice} onChange={(event) => setForm({ ...form, buyPrice: event.target.value })} /></label>
-          <label>Buy date<input type="date" className={form.buyDate ? undefined : "date-empty"} value={form.buyDate} onChange={(event) => setForm({ ...form, buyDate: event.target.value })} /></label>
+          <label>{t("dialog.buyPrice")}<input type="number" min="0.01" step={priceStep} value={form.buyPrice} onChange={(event) => setForm({ ...form, buyPrice: event.target.value })} /></label>
+          <label>{t("dialog.buyDate")}<input type="date" className={form.buyDate ? undefined : "date-empty"} value={form.buyDate} onChange={(event) => setForm({ ...form, buyDate: event.target.value })} /></label>
         </div>
         <div className="two-columns">
-          <label>Sell price<input type="number" min="0.01" step={priceStep} value={form.sellPrice} onChange={(event) => setForm({ ...form, sellPrice: event.target.value })} /></label>
-          <label>Sell date<input type="date" className={form.sellDate ? undefined : "date-empty"} value={form.sellDate} onChange={(event) => setForm({ ...form, sellDate: event.target.value })} /></label>
+          <label>{t("dialog.sellPrice")}<input type="number" min="0.01" step={priceStep} value={form.sellPrice} onChange={(event) => setForm({ ...form, sellPrice: event.target.value })} /></label>
+          <label>{t("dialog.sellDate")}<input type="date" className={form.sellDate ? undefined : "date-empty"} value={form.sellDate} onChange={(event) => setForm({ ...form, sellDate: event.target.value })} /></label>
         </div>
-        <label>Note<textarea rows={3} value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
+        <label>{t("dialog.note")}<textarea rows={3} value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
         {error && <p className="field-error" role="alert">{error}</p>}
-        <div className="dialog-actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save"}</button></div>
+        <div className="dialog-actions"><button type="button" onClick={onClose}>{t("dialog.cancel")}</button><button className="primary" type="submit" disabled={saving}>{saving ? t("dialog.saving") : t("dialog.save")}</button></div>
       </form>
     </div>
   );
