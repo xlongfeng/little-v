@@ -62,10 +62,10 @@ The stock `name` and `code` are stored once per file, not repeated on each trans
 | `createDate` | Automatically generated creation timestamp |
 | `modifyDate` | Automatically generated last-modified timestamp |
 | `quantity` | Optional trade quantity, stored as an integer (no fractional part); when present, must be a positive whole number that is a multiple of 100 |
-| `buyPrice` | Optional buy price; must be a positive number when present, independent of `buyDate` |
-| `buyDate` | Optional buy date in `YYYY-MM-DD` format when present, independent of `buyPrice` |
-| `sellPrice` | Optional sell price; must be a positive number when present, independent of `sellDate` |
-| `sellDate` | Optional sell date in `YYYY-MM-DD` format when present, independent of `sellPrice` |
+| `buyPrice` | Optional buy price; must be a positive number when present; at least one of `buyPrice` or `sellPrice` is required |
+| `buyDate` | Optional buy date in `YYYY-MM-DD` format when present; requires `buyPrice` |
+| `sellPrice` | Optional sell price; must be a positive number when present; at least one of `buyPrice` or `sellPrice` is required |
+| `sellDate` | Optional sell date in `YYYY-MM-DD` format when present; requires `sellPrice` |
 | `note` | Optional free-text note (single-line or multi-line); leading/trailing whitespace is trimmed and blank notes are treated as absent |
 
 ## 5. Transaction Rules
@@ -82,7 +82,7 @@ The stock `name` and `code` are stored once per file, not repeated on each trans
 
 - Stock name and code are required; every other field is optional.
 - Quantity, when provided, must be a finite positive whole number that is a multiple of 100.
-- Each price, when present, must be a finite positive value; each date, when present, must use `YYYY-MM-DD`. Prices and dates are validated independently of one another.
+- Each price, when present, must be a finite positive value; each date, when present, must use `YYYY-MM-DD` and requires the price on the same side. A transaction must contain a Buy Price, Sell Price, or both.
 - Prices are rounded before being saved: ordinary A-share stocks are stored with 2 decimal places, while ETFs and LOFs are stored with 3 decimal places.
 - Transactions can be edited in place by double-clicking their row, or removed entirely via the trading record table's row **Delete transaction** icon.
 
@@ -203,13 +203,13 @@ The **Create** action opens a modal dialog containing:
 | --- | --- |
 | Stock | Required unified combobox; see interaction below |
 | Quantity | Optional positive whole number; defaults to `1000`; increments/decrements by `100`; must be a multiple of `100`; decimal points cannot be entered |
-| Buy price | Optional positive number, independent of Buy date; the spinbox step matches the selected stock's decimal precision (0.01 for stocks, 0.001 for ETFs/LOFs) |
-| Buy date | Optional date, empty by default, independent of Buy price; the unset `mm/dd/yyyy` placeholder is shown in gray |
-| Sell price | Optional positive number, independent of Sell date; the spinbox step matches the selected stock's decimal precision (0.01 for stocks, 0.001 for ETFs/LOFs) |
-| Sell date | Optional date, empty by default, independent of Sell price; the unset `mm/dd/yyyy` placeholder is shown in gray |
+| Buy price | Optional positive number; at least one of Buy price or Sell price is required; the spinbox step matches the selected stock's decimal precision (0.01 for stocks, 0.001 for ETFs/LOFs) |
+| Buy date | Optional date, empty by default; requires a Buy price; the unset `mm/dd/yyyy` placeholder is shown in gray |
+| Sell price | Optional positive number; at least one of Buy price or Sell price is required; the spinbox step matches the selected stock's decimal precision (0.01 for stocks, 0.001 for ETFs/LOFs) |
+| Sell date | Optional date, empty by default; requires a Sell price; the unset `mm/dd/yyyy` placeholder is shown in gray |
 | Note | Optional free-text note, entered in a multi-line text area at the bottom of the dialog |
 
-The dialog field order is **Stock**, **Quantity**, then the **Buy price**/**Buy date** pair, then the **Sell price**/**Sell date** pair, and finally **Note** at the bottom. Only Stock is required; Quantity, Buy price, Buy date, Sell price, Sell date, and Note may each be left empty independently of one another and filled in in any combination (for example, both sides at once to record an already-closed round-trip in a single transaction, or a price without its matching date). The stock combobox has the placeholder **Select or search a stock**. Clicking its arrow opens the locally recorded stocks. Typing a name or code and pressing Enter replaces that list with matching `stock-api` results. Clearing the input and pressing Enter restores the locally recorded-stock list. Clicking anywhere outside the combobox closes its open list.
+The dialog field order is **Stock**, **Quantity**, then the **Buy price**/**Buy date** pair, then the **Sell price**/**Sell date** pair, and finally **Note** at the bottom. Stock and at least one price are required; Quantity, both dates, and Note may be left empty. A price may be recorded without its matching date, but a date cannot be recorded without its matching price. The stock combobox has the placeholder **Select or search a stock**. Clicking its arrow opens the locally recorded stocks. Typing a name or code and pressing Enter replaces that list with matching `stock-api` results. Clearing the input and pressing Enter restores the locally recorded-stock list. Clicking anywhere outside the combobox closes its open list.
 
 Search results are restricted to mainland A-share stocks, ETFs, and LOFs (Shanghai/Shenzhen main board, ChiNext, and STAR market codes plus Shanghai/Shenzhen ETF and LOF codes). Index quotes (e.g. SH000300, SZ399006) and non A-share markets (e.g. Hong Kong or US codes) are excluded from the results.
 
@@ -222,8 +222,8 @@ Double-clicking a table row reopens the same dialog, titled **Edit transaction**
 1. A user can save a transaction with only a buy price and date and see it as an open buy row in the table.
 2. A user can save a transaction with only a sell price and date and see it as an open sell row in the table.
 3. A user can save a transaction with both a buy price/date and a sell price/date and see it as a closed row in the table.
-4. A user can save a transaction with a price but no matching date, or a date but no matching price, since each field is independently optional.
-5. A user can save a transaction with only a stock selected and every other field left empty.
+4. A user can save a transaction with a price but no matching date; a date without its matching price is rejected.
+5. A user cannot save a transaction with neither a Buy Price nor a Sell Price.
 6. Closing and reopening the application retains saved transactions from the local JSON ledger files.
 7. Filtering by checked stock names, status, or period updates the visible rows immediately.
 8. A stock-search error is visible in the dialog and does not hide existing local stock choices.

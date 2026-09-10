@@ -209,6 +209,9 @@ fn validate_side(price: Option<f64>, date: Option<&String>, side: &str) -> Resul
         }
     }
     if let Some(date) = date {
+        if price.is_none() {
+            return Err(format!("{side} price is required when {side} date is set."));
+        }
         if !valid_date(date) {
             return Err(format!("{side} date must use YYYY-MM-DD."));
         }
@@ -233,6 +236,9 @@ fn validate_fields(
     }
     validate_side(buy_price, buy_date, "Buy")?;
     validate_side(sell_price, sell_date, "Sell")?;
+    if buy_price.is_none() && sell_price.is_none() {
+        return Err("A buy price or sell price is required.".into());
+    }
     Ok(())
 }
 
@@ -561,7 +567,7 @@ mod tests {
             name: "Example Corp".into(),
             code: "EXAMPLE".into(),
             quantity: Some(100),
-            buy_price: None,
+            buy_price: Some(10.0),
             buy_date: None,
             sell_price: None,
             sell_date: None,
@@ -595,6 +601,7 @@ mod tests {
         let transaction = save_transaction_to(
             directory.path(),
             CreateTransactionRequest {
+                buy_price: None,
                 sell_price: Some(12.0),
                 sell_date: Some("2026-09-05".into()),
                 ..base_request()
@@ -626,20 +633,17 @@ mod tests {
     }
 
     #[test]
-    fn saves_a_transaction_with_only_a_stock_selected() {
+    fn rejects_a_transaction_without_a_buy_or_sell_price() {
         let directory = tempdir().unwrap();
-        let transaction = save_transaction_to(
+        let result = save_transaction_to(
             directory.path(),
             CreateTransactionRequest {
                 quantity: None,
+                buy_price: None,
                 ..base_request()
             },
-        )
-        .unwrap();
-
-        assert_eq!(transaction.quantity, None);
-        assert_eq!(transaction.buy_price, None);
-        assert_eq!(transaction.sell_price, None);
+        );
+        assert!(result.unwrap_err().contains("buy price or sell price"));
     }
 
     #[test]
@@ -692,19 +696,30 @@ mod tests {
     }
 
     #[test]
-    fn saves_a_sell_date_without_a_sell_price() {
+    fn rejects_a_sell_date_without_a_sell_price() {
         let directory = tempdir().unwrap();
-        let transaction = save_transaction_to(
+        let result = save_transaction_to(
             directory.path(),
             CreateTransactionRequest {
                 sell_date: Some("2026-09-05".into()),
                 ..base_request()
             },
-        )
-        .unwrap();
+        );
+        assert!(result.unwrap_err().contains("Sell price is required"));
+    }
 
-        assert_eq!(transaction.sell_date, Some("2026-09-05".into()));
-        assert_eq!(transaction.sell_price, None);
+    #[test]
+    fn rejects_a_buy_date_without_a_buy_price() {
+        let directory = tempdir().unwrap();
+        let result = save_transaction_to(
+            directory.path(),
+            CreateTransactionRequest {
+                buy_price: None,
+                buy_date: Some("2026-09-05".into()),
+                ..base_request()
+            },
+        );
+        assert!(result.unwrap_err().contains("Buy price is required"));
     }
 
     #[test]
@@ -842,7 +857,7 @@ mod tests {
             code: code.into(),
             uuid: uuid.into(),
             quantity: Some(100),
-            buy_price: None,
+            buy_price: Some(10.0),
             buy_date: None,
             sell_price: None,
             sell_date: None,
@@ -889,6 +904,20 @@ mod tests {
         let ledger = load_ledgers_from(directory.path()).unwrap().pop().unwrap();
         assert_eq!(ledger.transactions.len(), 1);
         assert_eq!(ledger.transactions[0].quantity, Some(200));
+    }
+
+    #[test]
+    fn rejects_updating_a_transaction_without_a_buy_or_sell_price() {
+        let directory = tempdir().unwrap();
+        let created = save_transaction_to(directory.path(), base_request()).unwrap();
+        let result = update_transaction_in(
+            directory.path(),
+            UpdateTransactionRequest {
+                buy_price: None,
+                ..base_update("EXAMPLE", &created.uuid)
+            },
+        );
+        assert!(result.unwrap_err().contains("buy price or sell price"));
     }
 
     #[test]

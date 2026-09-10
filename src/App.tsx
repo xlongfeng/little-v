@@ -1057,6 +1057,18 @@ function TransactionDialog({
     const hasSellPrice = form.sellPrice.trim() !== "";
     const hasSellDate = form.sellDate.trim() !== "";
     const hasNote = form.note.trim() !== "";
+    if (hasBuyDate && !hasBuyPrice) {
+      setError(t("dialog.buyDateRequiresPrice"));
+      return;
+    }
+    if (hasSellDate && !hasSellPrice) {
+      setError(t("dialog.sellDateRequiresPrice"));
+      return;
+    }
+    if (!hasBuyPrice && !hasSellPrice) {
+      setError(t("dialog.priceRequired"));
+      return;
+    }
     setSaving(true);
     setError("");
     try {

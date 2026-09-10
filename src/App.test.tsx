@@ -1152,7 +1152,7 @@ describe("App", () => {
     });
   });
 
-  it("creates a transaction with a sell date but no sell price", async () => {
+  it("rejects a sell date without a sell price", async () => {
     const user = userEvent.setup();
     invoke.mockResolvedValue([]);
     render(<App />);
@@ -1168,14 +1168,26 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(invoke).toHaveBeenCalledWith("create_transaction", {
-      request: expect.objectContaining({
-        buyPrice: null,
-        buyDate: null,
-        sellPrice: null,
-        sellDate: "2026-09-05",
-      }),
-    });
+    expect(screen.getByText("Enter a sell price when a sell date is set.")).toBeInTheDocument();
+    expect(invoke).not.toHaveBeenCalledWith("create_transaction", expect.anything());
+  });
+
+  it("rejects a buy date without a buy price", async () => {
+    const user = userEvent.setup();
+    invoke.mockResolvedValue([]);
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    searchStocks.mockResolvedValue([{ code: "SH600001", name: "New Bank" }]);
+    const stockInput = screen.getByRole("combobox", { name: "Stock" });
+    await user.type(stockInput, "New Bank{Enter}");
+    await user.click(screen.getByRole("button", { name: /New Bank/ }));
+    fireEvent.change(screen.getByLabelText("Buy date"), { target: { value: "2026-09-05" } });
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.getByText("Enter a buy price when a buy date is set.")).toBeInTheDocument();
+    expect(invoke).not.toHaveBeenCalledWith("create_transaction", expect.anything());
   });
 
   it("shows the date placeholder in gray until a buy or sell date is set", async () => {
@@ -1192,7 +1204,7 @@ describe("App", () => {
     expect(screen.getByLabelText("Sell date")).toHaveClass("date-empty");
   });
 
-  it("creates a transaction with only a stock selected", async () => {
+  it("rejects a transaction with neither a buy nor sell price", async () => {
     const user = userEvent.setup();
     invoke.mockResolvedValue([]);
     render(<App />);
@@ -1206,18 +1218,8 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(invoke).toHaveBeenCalledWith("create_transaction", {
-      request: expect.objectContaining({
-        name: "New Bank",
-        code: "SH600001",
-        quantity: null,
-        buyPrice: null,
-        buyDate: null,
-        sellPrice: null,
-        sellDate: null,
-        note: null,
-      }),
-    });
+    expect(screen.getByText("Enter a buy price or sell price.")).toBeInTheDocument();
+    expect(invoke).not.toHaveBeenCalledWith("create_transaction", expect.anything());
   });
 
   it("sets the price spinbox step to match each stock's decimal precision", async () => {
@@ -1253,6 +1255,7 @@ describe("App", () => {
     const stockInput = screen.getByRole("combobox", { name: "Stock" });
     await user.type(stockInput, "New Bank{Enter}");
     await user.click(screen.getByRole("button", { name: /New Bank/ }));
+    await user.type(screen.getByLabelText("Buy price"), "10");
 
     fireEvent.change(screen.getByLabelText("Note"), {
       target: { value: "Watch earnings guidance\nCheck next quarter" },
