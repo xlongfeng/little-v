@@ -142,8 +142,13 @@ td.price-alert-loss { color: #107c10; font-weight: 700; }
 .settings-grid label, .settings-grid > label { font-weight: 700; font-size: 14px; color: #212121; }
 .data-directory-input { display: flex; min-width: 0; gap: 8px; }
 .data-directory-input input { min-width: 0; flex: 1; }
-.stock-combobox { position: relative; display: flex; }
+.stock-combobox { position: relative; display: flex; min-width: 0; }
 .stock-combobox input { padding-right: 40px; }
+.stock-combobox.has-current-quote input { padding-right: 160px; }
+.stock-current-quote { position: absolute; right: 44px; top: 50%; transform: translateY(-50%); font-weight: 700; white-space: nowrap; }
+.stock-combobox.has-current-quote:has(input:disabled) .stock-current-quote { right: 8px; }
+.stock-current-quote.price-gain { color: #d13438; }
+.stock-current-quote.price-loss { color: #107c10; }
 .combobox-toggle { position: absolute; top: 1px; right: 1px; height: calc(100% - 2px); border: 0; border-left: 1px solid #b3b3b3; border-radius: 0 2px 2px 0; padding: 0 12px; background: #f3f3f3; }
 .stock-options { position: absolute; z-index: 2; top: calc(100% + 3px); left: 0; right: 0; max-height: 190px; overflow-y: auto; margin: 0; padding: 4px; list-style: none; border: 1px solid #b3b3b3; border-radius: 2px; background: #fff; box-shadow: 0 4px 10px #00000026; }
 .stock-options button { width: 100%; border: 0; border-radius: 2px; padding: 8px; text-align: left; background: transparent; }

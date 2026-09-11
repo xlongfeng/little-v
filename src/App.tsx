@@ -1162,6 +1162,7 @@ function TransactionDialog({
   onCreated: () => void;
 }) {
   const { t } = useLanguage();
+  const { quotes } = usePriceFeed();
   const [form, setForm] = useState(() => (editing ? formFromRow(editing) : initialForm()));
   const [stockQuery, setStockQuery] = useState(() => (editing ? `${editing.name} (${editing.code})` : ""));
   const [searchResults, setSearchResults] = useState<StockOption[] | null>(null);
@@ -1176,6 +1177,7 @@ function TransactionDialog({
   );
   const priceStep = 1 / 10 ** pricePrecision(form.stock?.code ?? "");
   const choices = searchResults ?? localStocks;
+  const selectedQuote = form.stock ? quotes[form.stock.code] : undefined;
 
   useEffect(() => {
     if (!stockListOpen) {
@@ -1300,7 +1302,7 @@ function TransactionDialog({
       <form className="dialog" onSubmit={submit} aria-label={editing ? t("dialog.editTransaction") : t("dialog.createTransaction")} noValidate>
         <div className="dialog-heading"><h2>{editing ? t("dialog.editTransaction") : t("dialog.createTransaction")}</h2><button type="button" className="icon-button" onClick={onClose} aria-label={t("dialog.close")}>×</button></div>
         <label>{t("dialog.stock")}
-          <div className="stock-combobox" ref={stockComboboxRef}>
+          <div className={`stock-combobox${selectedQuote ? " has-current-quote" : ""}`} ref={stockComboboxRef}>
             <input
               value={stockQuery}
               disabled={!!editing}
@@ -1322,6 +1324,11 @@ function TransactionDialog({
               aria-controls="stock-options"
               aria-autocomplete="list"
             />
+            {selectedQuote && (
+              <output className={`stock-current-quote ${quoteChangeClass(selectedQuote)}`}>
+                {selectedQuote.now.toFixed(pricePrecision(form.stock!.code))} / {formatQuotePercent(selectedQuote)}
+              </output>
+            )}
             {!editing && (
               <button
                 type="button"

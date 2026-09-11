@@ -279,6 +279,28 @@ describe("App", () => {
     expect(screen.getByLabelText("Buy date")).toHaveValue("2026-09-01");
   });
 
+  it("shows the selected stock's live quote after the combobox in create and edit dialogs", async () => {
+    const user = userEvent.setup();
+    fetchQuotes.mockResolvedValue({
+      SH600000: { code: "SH600000", now: 10.42, yesterday: 9, percent: 0.1578 },
+    });
+    render(<App />);
+    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    await waitFor(() => expect(fetchQuotes).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Show existing stocks" }));
+    await user.click(screen.getByRole("button", { name: "Example Bank (SH600000)" }));
+    const createQuote = await screen.findByText("10.42 / +15.78%");
+    expect(createQuote).toHaveClass("stock-current-quote");
+    expect(createQuote.closest(".stock-combobox")).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    const row = screen.getByText("Example Bank").closest("tr") as HTMLElement;
+    await user.dblClick(row);
+    expect(screen.getByText("10.42 / +15.78%").closest(".stock-combobox")).not.toBeNull();
+  });
+
   it("saves an edited transaction and reloads the table", async () => {
     const user = userEvent.setup();
     invoke.mockImplementation((command: string) => {
