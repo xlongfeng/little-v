@@ -14,7 +14,7 @@ import {
 } from "./ledger";
 import { searchStocks, type StockQuote } from "./stockApi";
 import { version as appVersion } from "../package.json";
-import { formatRecordCount, isLanguagePreference, useLanguage, type LanguagePreference } from "./i18n";
+import { formatRecordCount, isLanguagePreference, useLanguage, type LanguageContextValue, type LanguagePreference } from "./i18n";
 import { LanguageProvider } from "./LanguageProvider";
 import { DEFAULT_REFRESH_SECONDS, MIN_REFRESH_SECONDS, PriceFeedProvider, usePriceFeed } from "./PriceFeedProvider";
 import { ProfitSettingsProvider, useProfitSettings } from "./ProfitSettingsProvider";
@@ -70,6 +70,58 @@ function formatNetProfit(row: TableRow, settings: ProfitSettings): string {
 function formatTotalProfit(rows: TableRow[], settings: ProfitSettings): string {
   const total = rows.reduce((sum, row) => sum + (netProfitFor(row, settings) ?? 0), 0);
   return total.toFixed(2);
+}
+
+function parseLocalDate(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return null;
+  }
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  return date.getFullYear() === Number(year) && date.getMonth() === Number(month) - 1 && date.getDate() === Number(day)
+    ? date
+    : null;
+}
+
+function monthsBefore(date: Date, months: number): Date {
+  const result = new Date(date.getFullYear(), date.getMonth() - months, 1);
+  result.setDate(Math.min(date.getDate(), new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate()));
+  return result;
+}
+
+function formatTableDate(value: string | undefined, t: LanguageContextValue["t"]): string {
+  if (!value) {
+    return "";
+  }
+  const date = parseLocalDate(value);
+  if (!date) {
+    return value;
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const oneDayAgo = new Date(today);
+  oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+  const twoDaysAgo = new Date(today);
+  twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+  const weekAgo = new Date(today);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const twoWeeksAgo = new Date(today);
+  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+  if (date > today || date < monthsBefore(today, 24)) {
+    return value;
+  }
+  if (date >= today) return t("table.dateToday");
+  if (date >= oneDayAgo) return t("table.dateDayAgo");
+  if (date >= twoDaysAgo) return t("table.dateTwoDaysAgo");
+  if (date > weekAgo) return t("table.dateThreeDaysAgo");
+  if (date > twoWeeksAgo) return t("table.dateWeekAgo");
+  if (date > monthsBefore(today, 1)) return t("table.dateTwoWeeksAgo");
+  if (date > monthsBefore(today, 2)) return t("table.dateMonthAgo");
+  if (date > monthsBefore(today, 3)) return t("table.dateTwoMonthsAgo");
+  if (date > monthsBefore(today, 6)) return t("table.dateThreeMonthsAgo");
+  if (date > monthsBefore(today, 12)) return t("table.dateSixMonthsAgo");
+  return t("table.dateYearAgo");
 }
 
 function profitChangePercent(row: TableRow, settings: ProfitSettings): number | null {
@@ -911,9 +963,13 @@ function AppContent() {
                 <NameCell row={row} />
                 <td>{row.quantity ?? ""}</td>
                 <PriceCell price={row.buyPrice} code={row.code} quantity={row.quantity} isSellPrice={false} alertClass={alerts.get(row.key)?.buy} />
-                <td className={row.buyPrice != null && !row.buyDate ? "missing-date" : undefined}>{row.buyDate ?? ""}</td>
+                <td className={`table-date${row.buyPrice != null && !row.buyDate ? " missing-date" : ""}`} title={row.buyDate}>
+                  {formatTableDate(row.buyDate, t)}
+                </td>
                 <PriceCell price={row.sellPrice} code={row.code} quantity={row.quantity} isSellPrice alertClass={alerts.get(row.key)?.sell} />
-                <td className={row.sellPrice != null && !row.sellDate ? "missing-date" : undefined}>{row.sellDate ?? ""}</td>
+                <td className={`table-date${row.sellPrice != null && !row.sellDate ? " missing-date" : ""}`} title={row.sellDate}>
+                  {formatTableDate(row.sellDate, t)}
+                </td>
                 <ProfitCell row={row} settings={profitSettings} />
                 <td className="row-actions">
                   <button

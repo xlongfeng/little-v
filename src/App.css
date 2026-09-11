@@ -50,6 +50,7 @@ td { padding: 2px 14px; border-bottom: 1px solid #d0d0d0; }
 tbody tr:nth-child(even) { background: #f7f7f7; }
 tbody tr:hover { background: #e8f0fb; }
 tbody tr.closed-row { color: #808080; }
+td.table-date { font-size: 13px; }
 td small { display: block; color: #424242; margin-top: 2px; }
 .comment-indicator { flex-shrink: 0; margin-left: auto; color: #185abd; cursor: help; font-size: 13px; }
 .missing-date { background: #fff4ce; }

@@ -279,6 +279,67 @@ describe("App", () => {
     expect(screen.getByLabelText("Buy date")).toHaveValue("2026-09-01");
   });
 
+  it("displays table dates as relative milestones and shows the stored date on hover", async () => {
+    const dateText = (date: Date) => [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, "0"),
+      String(date.getDate()).padStart(2, "0"),
+    ].join("-");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const daysAgo = (days: number) => {
+      const date = new Date(today);
+      date.setDate(date.getDate() - days);
+      return date;
+    };
+    const monthsAgo = (months: number) => {
+      const date = new Date(today);
+      date.setMonth(date.getMonth() - months);
+      return date;
+    };
+    const dates = [
+      [today, "today"],
+      [daysAgo(1), "1 day ago"],
+      [daysAgo(2), "2 days ago"],
+      [daysAgo(3), "3 days ago"],
+      [daysAgo(6), "3 days ago"],
+      [daysAgo(7), "1 week ago"],
+      [daysAgo(13), "1 week ago"],
+      [daysAgo(14), "2 weeks ago"],
+      [daysAgo(20), "2 weeks ago"],
+      [monthsAgo(1), "1 month ago"],
+      [monthsAgo(2), "2 months ago"],
+      [monthsAgo(3), "3 months ago"],
+      [monthsAgo(6), "6 months ago"],
+      [monthsAgo(12), "1 year ago"],
+    ] as const;
+    const oneYearDate = dateText(monthsAgo(13));
+    const olderDate = dateText(monthsAgo(25));
+    invoke.mockResolvedValue([{
+      code: "SH600000",
+      name: "Example Bank",
+      transactions: [
+        ...dates.map(([date], index) => ({
+          uuid: `relative-${index}`,
+          createDate: "1",
+          modifyDate: "1",
+          buyDate: dateText(date),
+        })),
+        { uuid: "one-year", createDate: "1", modifyDate: "1", buyDate: oneYearDate },
+        { uuid: "older", createDate: "1", modifyDate: "1", buyDate: olderDate },
+      ],
+    }]);
+    render(<App />);
+
+    for (const [date, label] of dates) {
+      const cell = await screen.findByTitle(dateText(date));
+      expect(cell).toHaveTextContent(label);
+      expect(cell).toHaveClass("table-date");
+    }
+    expect(screen.getByTitle(oneYearDate)).toHaveTextContent("1 year ago");
+    expect(screen.getByTitle(olderDate)).toHaveTextContent(olderDate);
+  });
+
   it("shows the selected stock's live quote after the combobox in create and edit dialogs", async () => {
     const user = userEvent.setup();
     fetchQuotes.mockResolvedValue({
