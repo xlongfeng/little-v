@@ -117,9 +117,9 @@ At the far right of the menu bar, a **Total profit** indicator shows the sum of 
 
 ### 6.1.3 Settings dialog editing model
 
-- The Settings dialog stages every field (Language, data folder, Refresh interval, and the Stock Fee fields below) in a local draft; opening the dialog initializes the draft from the currently applied values. Language selection is the exception in presentation only: it immediately previews the selected language, without applying or persisting it.
-- **Save** validates and applies the entire draft at once (data folder, Language, Refresh interval, and Stock Fee settings together). Every applied setting is persisted in browser `localStorage`.
-- **Default** resets only the in-progress draft to the built-in defaults (System Default language, 3-second refresh interval, and the default Stock Fee values below); it does **not** apply or persist anything until **Save** is subsequently clicked.
+- The Settings dialog stages every field (Language, data folder, Refresh interval, Stock Fee fields, and Price Change Alert fields) in a local draft; opening the dialog initializes the draft from the currently applied values. Language selection is the exception in presentation only: it immediately previews the selected language, without applying or persisting it.
+- **Save** validates and applies the entire draft at once (data folder, Language, Refresh interval, Stock Fee settings, and Price Change Alert settings together). Every applied setting is persisted in browser `localStorage`.
+- **Default** resets only the in-progress draft to the built-in defaults (System Default language, 3-second refresh interval, and the default Stock Fee and Price Change Alert values below); it does **not** apply or persist anything until **Save** is subsequently clicked.
 - **Cancel** (and the dialog's close button) discards the draft, restores the previously applied language if it was being previewed, and closes the dialog without applying or persisting any changes; the next time Settings is opened, the draft is rebuilt from the still-current applied values.
 - Save rejects the draft when the data folder is blank or unavailable, the refresh interval is below one second, or a Stock Fee field is not a finite, non-negative number; no draft values are applied in that case.
 
@@ -143,6 +143,20 @@ At the far right of the menu bar, a **Total profit** indicator shows the sum of 
 | Minimum trade fee | `5` | Flat currency amount per side |
 
 - Changed values apply to the Profit column and the menu bar's Total profit indicator immediately after **Save**, and are persisted in browser `localStorage` (`littlev-profit-settings`).
+
+### 6.1.6 Price Change Alert settings
+
+- The **Price Change Alert / 涨跌幅预警** group in Settings provides configurable **Gain (%)** and **Loss (%)** thresholds, both defaulting to `3`.
+- These values are persisted in browser `localStorage` (`littlev-price-alert-settings`) and are applied to open transactions only when a live quote is available.
+- Each price side is evaluated independently per stock:
+
+| Candidate | Selection | Alert condition | Color |
+| --- | --- | --- | --- |
+| Dated Buy | Lowest open Buy Price with a Buy Date | Current price `< buy price × (1 − Loss%)` | Green |
+| Dated Buy | Lowest open Buy Price with a Buy Date | Current price `> buy price × (1 + Gain%)` | Red |
+| Undated Buy | Lowest open Buy Price with no Buy Date | Current price `< buy price` | Green |
+| Dated Sell | Highest open Sell Price with a Sell Date | Current price `< sell price × (1 − Loss%)` | Red |
+| Undated Sell | Highest open Sell Price with no Sell Date | Current price `> sell price` | Red |
 
 ### 6.2 Filters
 

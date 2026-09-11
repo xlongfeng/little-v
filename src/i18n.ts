@@ -91,6 +91,9 @@ const en: Dictionary = {
   "settings.feeRate": "Trade fee rate (%)",
   "settings.minFee": "Minimum trade fee",
   "settings.stampDutyRate": "Stamp duty rate (%)",
+  "settings.priceChangeAlert": "Price Change Alert",
+  "settings.alertGain": "Gain (%)",
+  "settings.alertLoss": "Loss (%)",
   "settings.default": "Default",
 };
 
@@ -179,6 +182,9 @@ const zh_cn: Dictionary = {
   "settings.feeRate": "交易手续费率（%）",
   "settings.minFee": "最低交易手续费",
   "settings.stampDutyRate": "印花税率（%）",
+  "settings.priceChangeAlert": "涨跌幅预警",
+  "settings.alertGain": "涨幅（%）",
+  "settings.alertLoss": "跌幅（%）",
   "settings.default": "默认",
 };
 

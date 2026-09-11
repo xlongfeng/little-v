@@ -53,6 +53,8 @@ tbody tr.closed-row { color: #808080; }
 td small { display: block; color: #424242; margin-top: 2px; }
 .comment-indicator { flex-shrink: 0; margin-left: auto; color: #185abd; cursor: help; font-size: 13px; }
 .missing-date { background: #fff4ce; }
+td.price-alert-gain { color: #d13438; font-weight: 700; }
+td.price-alert-loss { color: #107c10; font-weight: 700; }
 .name-cell.name-cell { display: flex; align-items: center; gap: 6px; overflow: visible; cursor: default; }
 .stock-name { position: relative; min-width: 0; overflow: visible; text-overflow: ellipsis; }
 .name-tooltip {

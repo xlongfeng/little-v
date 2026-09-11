@@ -533,6 +533,54 @@ describe("App", () => {
     expect(popup.querySelector(".current-quote-reference")).toHaveClass("price-gain");
   });
 
+  it("colors the dated and undated Buy and Sell candidates independently for Price Change Alert", async () => {
+    invoke.mockResolvedValue([
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [
+          { uuid: "dated-buy-loss", createDate: "1", modifyDate: "1", buyPrice: 10, buyDate: "2026-09-01" },
+          { uuid: "undated-buy", createDate: "2", modifyDate: "2", buyPrice: 11 },
+          { uuid: "undated-sell", createDate: "3", modifyDate: "3", sellPrice: 8 },
+          { uuid: "dated-sell", createDate: "4", modifyDate: "4", buyPrice: 15, sellPrice: 12, sellDate: "2026-09-03" },
+          { uuid: "closed", createDate: "6", modifyDate: "6", quantity: 100, buyPrice: 9, buyDate: "2026-09-01", sellPrice: 14, sellDate: "2026-09-02" },
+        ],
+      },
+    ]);
+    fetchQuotes.mockResolvedValue({
+      SH600000: { code: "SH600000", now: 9, yesterday: 9, percent: 0 },
+    });
+    render(<App />);
+
+    await screen.findAllByText("Example Bank");
+    await waitFor(() => {
+      expect(screen.getByText("10.00").closest("td")).toHaveClass("price-alert-loss");
+      expect(screen.getByText("11.00").closest("td")).toHaveClass("price-alert-loss");
+      expect(screen.getByText("12.00").closest("td")).toHaveClass("price-alert-gain");
+      expect(screen.getByText("8.00").closest("td")).toHaveClass("price-alert-gain");
+      expect(screen.getByText("14.00").closest("td")).not.toHaveClass("price-alert-gain");
+    });
+  });
+
+  it("saves configurable Price Change Alert percentages", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("Example Bank");
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByLabelText("Gain (%)")).toHaveValue(3);
+    expect(screen.getByLabelText("Loss (%)")).toHaveValue(3);
+    await user.clear(screen.getByLabelText("Gain (%)"));
+    await user.type(screen.getByLabelText("Gain (%)"), "5");
+    await user.clear(screen.getByLabelText("Loss (%)"));
+    await user.type(screen.getByLabelText("Loss (%)"), "4");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(window.localStorage.getItem("littlev-price-alert-settings")).toBe(
+      JSON.stringify({ gainPercent: 5, lossPercent: 4 }),
+    );
+  });
+
   it("calculates sell-price reference changes from the transaction price minus the live price", async () => {
     invoke.mockResolvedValue([
       {

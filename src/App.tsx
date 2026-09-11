@@ -76,6 +76,36 @@ const UP_STEPS = Array.from({ length: 10 }, (_, index) => index + 1);
 const DOWN_STEPS = Array.from({ length: 10 }, (_, index) => -(index + 1));
 const HOVER_POPUP_DELAY_MS = 500;
 const DATA_DIRECTORY_STORAGE_KEY = "littlev-stock-data-directory";
+const PRICE_ALERT_SETTINGS_STORAGE_KEY = "littlev-price-alert-settings";
+const DEFAULT_PRICE_ALERT_PERCENT = 3;
+
+interface PriceAlertSettings {
+  gainPercent: number;
+  lossPercent: number;
+}
+
+function loadPriceAlertSettings(): PriceAlertSettings {
+  const stored = window.localStorage.getItem(PRICE_ALERT_SETTINGS_STORAGE_KEY);
+  if (!stored) {
+    return { gainPercent: DEFAULT_PRICE_ALERT_PERCENT, lossPercent: DEFAULT_PRICE_ALERT_PERCENT };
+  }
+  try {
+    const parsed: unknown = JSON.parse(stored);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      Number.isFinite((parsed as PriceAlertSettings).gainPercent) &&
+      (parsed as PriceAlertSettings).gainPercent >= 0 &&
+      Number.isFinite((parsed as PriceAlertSettings).lossPercent) &&
+      (parsed as PriceAlertSettings).lossPercent >= 0
+    ) {
+      return parsed as PriceAlertSettings;
+    }
+  } catch {
+    // Use defaults when the saved preference cannot be read.
+  }
+  return { gainPercent: DEFAULT_PRICE_ALERT_PERCENT, lossPercent: DEFAULT_PRICE_ALERT_PERCENT };
+}
 
 function quoteChangeClass(quote: StockQuote): string {
   if (quote.percent > 0) {
@@ -136,6 +166,73 @@ function referenceChangeClass(quote: StockQuote, referencePrice: number, isSellP
   return "";
 }
 
+function priceAlertClasses(
+  rows: TableRow[],
+  quotes: Record<string, StockQuote>,
+  settings: PriceAlertSettings,
+): Map<string, { buy?: string; sell?: string }> {
+  const alerts = new Map<string, { buy?: string; sell?: string }>();
+  const openRowsByCode = new Map<string, TableRow[]>();
+  for (const row of rows) {
+    if (!isRowClosed(row)) {
+      openRowsByCode.set(row.code, [...(openRowsByCode.get(row.code) ?? []), row]);
+    }
+  }
+
+  for (const [code, openRows] of openRowsByCode) {
+    const quote = quotes[code];
+    if (!quote) {
+      continue;
+    }
+    const datedBuyRows = openRows.filter((row) => row.buyPrice != null && row.buyDate);
+    const lowestDatedBuy = datedBuyRows.length
+      ? Math.min(...datedBuyRows.map((row) => row.buyPrice as number))
+      : undefined;
+    if (lowestDatedBuy != null) {
+      datedBuyRows.filter((row) => row.buyPrice === lowestDatedBuy).forEach((row) => {
+        if (quote.now < lowestDatedBuy * (1 - settings.lossPercent / 100)) {
+          alerts.set(row.key, { ...alerts.get(row.key), buy: "price-alert-loss" });
+        } else if (quote.now > lowestDatedBuy * (1 + settings.gainPercent / 100)) {
+          alerts.set(row.key, { ...alerts.get(row.key), buy: "price-alert-gain" });
+        }
+      });
+    }
+
+    const undatedBuyRows = openRows.filter((row) => row.buyPrice != null && !row.buyDate);
+    const lowestUndatedBuy = undatedBuyRows.length
+      ? Math.min(...undatedBuyRows.map((row) => row.buyPrice as number))
+      : undefined;
+    if (lowestUndatedBuy != null && quote.now < lowestUndatedBuy) {
+      undatedBuyRows
+        .filter((row) => row.buyPrice === lowestUndatedBuy)
+        .forEach((row) => alerts.set(row.key, { ...alerts.get(row.key), buy: "price-alert-loss" }));
+    }
+
+    const datedSellRows = openRows.filter((row) => row.sellPrice != null && row.sellDate);
+    const highestDatedSell = datedSellRows.length
+      ? Math.max(...datedSellRows.map((row) => row.sellPrice as number))
+      : undefined;
+    if (highestDatedSell != null && quote.now < highestDatedSell * (1 - settings.lossPercent / 100)) {
+      datedSellRows
+        .filter((row) => row.sellPrice === highestDatedSell)
+        .forEach((row) => alerts.set(row.key, { ...alerts.get(row.key), sell: "price-alert-gain" }));
+    }
+
+    const undatedSellRows = openRows.filter((row) => row.sellPrice != null && !row.sellDate);
+    const highestUndatedSell = undatedSellRows.length
+      ? Math.max(...undatedSellRows.map((row) => row.sellPrice as number))
+      : undefined;
+    if (highestUndatedSell != null && quote.now > highestUndatedSell) {
+      undatedSellRows
+        .filter((row) => row.sellPrice === highestUndatedSell)
+        .forEach((row) => {
+          alerts.set(row.key, { ...alerts.get(row.key), sell: "price-alert-gain" });
+        });
+    }
+  }
+  return alerts;
+}
+
 function CurrentQuoteRow({
   quote,
   referencePrice,
@@ -171,11 +268,13 @@ function PriceCell({
   code,
   quantity,
   isSellPrice,
+  alertClass,
 }: {
   price: number | null | undefined;
   code: string;
   quantity: number | null | undefined;
   isSellPrice: boolean;
+  alertClass?: string;
 }) {
   const { quotes } = usePriceFeed();
   const [visible, setVisible] = useState(false);
@@ -219,7 +318,7 @@ function PriceCell({
   const precision = pricePrecision(code);
   const quote = quotes[code];
   return (
-    <td className="price-cell" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+    <td className={`price-cell${alertClass ? ` ${alertClass}` : ""}`} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
       {price.toFixed(precision)}
       {visible && (
         <div ref={popupRef} className={`price-popup${showAbove ? " price-popup-above" : ""}`} role="tooltip">
@@ -373,6 +472,8 @@ interface SettingsDraft {
   feeRatePercent: string;
   minFee: string;
   stampDutyRatePercent: string;
+  alertGainPercent: string;
+  alertLossPercent: string;
 }
 
 function draftFromSettings(
@@ -380,6 +481,7 @@ function draftFromSettings(
   languagePreference: string,
   refreshIntervalSeconds: number,
   profitSettings: ProfitSettings,
+  priceAlertSettings: PriceAlertSettings,
 ): SettingsDraft {
   return {
     dataDirectory,
@@ -388,6 +490,8 @@ function draftFromSettings(
     feeRatePercent: String(profitSettings.feeRate * 100),
     minFee: String(profitSettings.minFee),
     stampDutyRatePercent: String(profitSettings.stampDutyRate * 100),
+    alertGainPercent: String(priceAlertSettings.gainPercent),
+    alertLossPercent: String(priceAlertSettings.lossPercent),
   };
 }
 
@@ -412,8 +516,9 @@ function AppContent() {
     clearLanguagePreview,
     t,
   } = useLanguage();
-  const { setCodes, refreshIntervalSeconds, setRefreshIntervalSeconds } = usePriceFeed();
+  const { quotes, setCodes, refreshIntervalSeconds, setRefreshIntervalSeconds } = usePriceFeed();
   const { profitSettings, setProfitSettings } = useProfitSettings();
+  const [priceAlertSettings, setPriceAlertSettings] = useState<PriceAlertSettings>(loadPriceAlertSettings);
   const [ledgers, setLedgers] = useState<StockLedger[]>([]);
   const [excludedFilterNames, setExcludedFilterNames] = useState<string[]>([]);
   const [nameFilterOpen, setNameFilterOpen] = useState(false);
@@ -425,7 +530,7 @@ function AppContent() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dataDirectory, setDataDirectory] = useState("");
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() =>
-    draftFromSettings("", languagePreference, refreshIntervalSeconds, profitSettings),
+    draftFromSettings("", languagePreference, refreshIntervalSeconds, profitSettings, priceAlertSettings),
   );
   const [settingsError, setSettingsError] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
@@ -438,14 +543,20 @@ function AppContent() {
   function openSettings() {
     clearLanguagePreview();
     setSettingsError("");
-    setSettingsDraft(draftFromSettings(dataDirectory, languagePreference, refreshIntervalSeconds, profitSettings));
+    setSettingsDraft(draftFromSettings(dataDirectory, languagePreference, refreshIntervalSeconds, profitSettings, priceAlertSettings));
     setSettingsOpen(true);
   }
 
   async function resetSettingsDraftToDefault() {
     try {
       const defaultDataDirectory = await invoke<string>("get_default_data_directory");
-      setSettingsDraft(draftFromSettings(defaultDataDirectory, "system", DEFAULT_REFRESH_SECONDS, DEFAULT_PROFIT_SETTINGS));
+      setSettingsDraft(draftFromSettings(
+        defaultDataDirectory,
+        "system",
+        DEFAULT_REFRESH_SECONDS,
+        DEFAULT_PROFIT_SETTINGS,
+        { gainPercent: DEFAULT_PRICE_ALERT_PERCENT, lossPercent: DEFAULT_PRICE_ALERT_PERCENT },
+      ));
       setSettingsError("");
     } catch (error) {
       setSettingsError(String(error));
@@ -464,12 +575,15 @@ function AppContent() {
     const feeRatePercent = Number(settingsDraft.feeRatePercent);
     const minFee = Number(settingsDraft.minFee);
     const stampDutyRatePercent = Number(settingsDraft.stampDutyRatePercent);
+    const alertGainPercent = Number(settingsDraft.alertGainPercent);
+    const alertLossPercent = Number(settingsDraft.alertLossPercent);
     if (
       !isLanguagePreference(settingsDraft.languagePreference) ||
       !settingsDraft.dataDirectory.trim() ||
       !Number.isFinite(refreshSeconds) ||
       refreshSeconds < MIN_REFRESH_SECONDS ||
-      ![feeRatePercent, minFee, stampDutyRatePercent].every((value) => Number.isFinite(value) && value >= 0)
+      ![feeRatePercent, minFee, stampDutyRatePercent, alertGainPercent, alertLossPercent]
+        .every((value) => Number.isFinite(value) && value >= 0)
     ) {
       setSettingsError(t("settings.invalidValues"));
       return;
@@ -489,6 +603,9 @@ function AppContent() {
         minFee,
         stampDutyRate: stampDutyRatePercent / 100,
       });
+      const nextPriceAlertSettings = { gainPercent: alertGainPercent, lossPercent: alertLossPercent };
+      setPriceAlertSettings(nextPriceAlertSettings);
+      window.localStorage.setItem(PRICE_ALERT_SETTINGS_STORAGE_KEY, JSON.stringify(nextPriceAlertSettings));
       clearLanguagePreview();
       setSettingsOpen(false);
       setSettingsError("");
@@ -611,6 +728,10 @@ function AppContent() {
       return true;
     });
   }, [allRows, excludedFilterNames, statusFilter, periodFilter]);
+  const alerts = useMemo(
+    () => priceAlertClasses(allRows, quotes, priceAlertSettings),
+    [allRows, quotes, priceAlertSettings],
+  );
   const selectedFilterCount = filterNames.length - excludedFilterNames.length;
 
   useEffect(() => {
@@ -742,9 +863,9 @@ function AppContent() {
               <tr key={row.key} className={isRowClosed(row) ? "closed-row" : undefined} onDoubleClick={() => setEditingRow(row)}>
                 <NameCell row={row} />
                 <td>{row.quantity ?? ""}</td>
-                <PriceCell price={row.buyPrice} code={row.code} quantity={row.quantity} isSellPrice={false} />
+                <PriceCell price={row.buyPrice} code={row.code} quantity={row.quantity} isSellPrice={false} alertClass={alerts.get(row.key)?.buy} />
                 <td className={row.buyPrice != null && !row.buyDate ? "missing-date" : undefined}>{row.buyDate ?? ""}</td>
-                <PriceCell price={row.sellPrice} code={row.code} quantity={row.quantity} isSellPrice />
+                <PriceCell price={row.sellPrice} code={row.code} quantity={row.quantity} isSellPrice alertClass={alerts.get(row.key)?.sell} />
                 <td className={row.sellPrice != null && !row.sellDate ? "missing-date" : undefined}>{row.sellDate ?? ""}</td>
                 <td>{formatNetProfit(row, profitSettings)}</td>
                 <td className="row-actions">
@@ -940,6 +1061,31 @@ function AppContent() {
                   aria-label={t("settings.minFee")}
                   value={settingsDraft.minFee}
                   onChange={(event) => setSettingsDraft((draft) => ({ ...draft, minFee: event.target.value }))}
+                />
+              </div>
+            </fieldset>
+            <fieldset className="settings-group">
+              <legend>{t("settings.priceChangeAlert")}</legend>
+              <div className="settings-grid">
+                <label htmlFor="settings-alert-gain">{t("settings.alertGain")}</label>
+                <input
+                  id="settings-alert-gain"
+                  type="number"
+                  min={0}
+                  step="any"
+                  aria-label={t("settings.alertGain")}
+                  value={settingsDraft.alertGainPercent}
+                  onChange={(event) => setSettingsDraft((draft) => ({ ...draft, alertGainPercent: event.target.value }))}
+                />
+                <label htmlFor="settings-alert-loss">{t("settings.alertLoss")}</label>
+                <input
+                  id="settings-alert-loss"
+                  type="number"
+                  min={0}
+                  step="any"
+                  aria-label={t("settings.alertLoss")}
+                  value={settingsDraft.alertLossPercent}
+                  onChange={(event) => setSettingsDraft((draft) => ({ ...draft, alertLossPercent: event.target.value }))}
                 />
               </div>
             </fieldset>
