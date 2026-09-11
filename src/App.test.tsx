@@ -714,6 +714,34 @@ describe("App", () => {
     expect(cells[6]).toHaveTextContent("");
   });
 
+  it("shows the net profit percentage when hovering over Profit", async () => {
+    invoke.mockResolvedValue([
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [
+          {
+            uuid: "closed",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            buyPrice: 10,
+            buyDate: "2026-09-01",
+            sellPrice: 12,
+            sellDate: "2026-09-02",
+          },
+        ],
+      },
+    ]);
+    render(<App />);
+
+    const profitCell = (await screen.findByText("189.40")).closest("td") as HTMLElement;
+    fireEvent.mouseEnter(profitCell);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("+18.94%");
+    expect(tooltip).toHaveClass("price-gain");
+  });
+
   it("shows the sum of visible rows' profit at the end of the menu bar", async () => {
     invoke.mockResolvedValue([
       {

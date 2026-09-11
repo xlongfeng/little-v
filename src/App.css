@@ -76,6 +76,25 @@ td.price-alert-loss { color: #107c10; font-weight: 700; }
 .name-tooltip-above { top: auto; bottom: 100%; }
 .name-tooltip .price-gain { color: #d13438; }
 .name-tooltip .price-loss { color: #107c10; }
+.profit-cell.profit-cell { position: relative; overflow: visible; cursor: default; }
+.profit-tooltip {
+  position: absolute;
+  z-index: 3;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 6px;
+  color: #4d4d4d;
+  background: #fff;
+  border: 1px solid #b3b3b3;
+  border-radius: 2px;
+  box-shadow: 0 4px 10px #00000026;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.profit-tooltip.price-gain { color: #d13438; }
+.profit-tooltip.price-loss { color: #107c10; }
 .price-cell.price-cell { position: relative; overflow: visible; cursor: default; }
 .price-popup {
   position: absolute;

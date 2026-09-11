@@ -72,6 +72,14 @@ function formatTotalProfit(rows: TableRow[], settings: ProfitSettings): string {
   return total.toFixed(2);
 }
 
+function profitChangePercent(row: TableRow, settings: ProfitSettings): number | null {
+  if (row.quantity == null || row.buyPrice == null || row.buyPrice === 0) {
+    return null;
+  }
+  const netProfit = netProfitFor(row, settings);
+  return netProfit == null ? null : netProfit / (row.buyPrice * row.quantity);
+}
+
 const UP_STEPS = Array.from({ length: 10 }, (_, index) => index + 1);
 const DOWN_STEPS = Array.from({ length: 10 }, (_, index) => -(index + 1));
 const HOVER_POPUP_DELAY_MS = 500;
@@ -363,6 +371,45 @@ function PriceCell({
               </tr>
             </tbody>
           </table>
+        </div>
+      )}
+    </td>
+  );
+}
+
+function ProfitCell({ row, settings }: { row: TableRow; settings: ProfitSettings }) {
+  const [visible, setVisible] = useState(false);
+  const timerRef = useRef<number | null>(null);
+  const changePercent = profitChangePercent(row, settings);
+
+  function clearTimer() {
+    if (timerRef.current != null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }
+
+  function handleMouseEnter() {
+    clearTimer();
+    timerRef.current = window.setTimeout(() => {
+      setVisible(true);
+    }, HOVER_POPUP_DELAY_MS);
+  }
+
+  function handleMouseLeave() {
+    clearTimer();
+    setVisible(false);
+  }
+
+  useEffect(() => clearTimer, []);
+
+  const profit = formatNetProfit(row, settings);
+  return (
+    <td className="profit-cell" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+      {profit}
+      {visible && changePercent != null && (
+        <div className={`profit-tooltip ${changePercent > 0 ? "price-gain" : changePercent < 0 ? "price-loss" : ""}`} role="tooltip">
+          {`${changePercent > 0 ? "+" : ""}${(changePercent * 100).toFixed(2)}%`}
         </div>
       )}
     </td>
@@ -867,7 +914,7 @@ function AppContent() {
                 <td className={row.buyPrice != null && !row.buyDate ? "missing-date" : undefined}>{row.buyDate ?? ""}</td>
                 <PriceCell price={row.sellPrice} code={row.code} quantity={row.quantity} isSellPrice alertClass={alerts.get(row.key)?.sell} />
                 <td className={row.sellPrice != null && !row.sellDate ? "missing-date" : undefined}>{row.sellDate ?? ""}</td>
-                <td>{formatNetProfit(row, profitSettings)}</td>
+                <ProfitCell row={row} settings={profitSettings} />
                 <td className="row-actions">
                   <button
                     type="button"
