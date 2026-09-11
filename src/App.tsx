@@ -988,11 +988,6 @@ function AppContent() {
                   <option value="en">{t("settings.languageEnglish")}</option>
                   <option value="zh_cn">{t("settings.languageZhCn")}</option>
                 </select>
-              </div>
-            </fieldset>
-            <fieldset className="settings-group">
-              <legend>{t("settings.storage")}</legend>
-              <div className="settings-grid">
                 <label htmlFor="settings-data-directory">{t("settings.dataDirectory")}</label>
                 <div className="data-directory-input">
                   <input

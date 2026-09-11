@@ -95,7 +95,7 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | Menu item | Behavior |
 | --- | --- |
 | **Create** | Opens the transaction creation dialog |
-| **Settings** | Shows **General** (Language), **Storage** (data folder), **Stock Quotes** (refresh interval), and **Stock Fee** (stamp duty rate, trade fee rate, minimum trade fee) groups. All changes are staged in the dialog and only take effect after **Save**; the dialog also offers **Default** (resets the in-progress draft to the built-in defaults, without applying it) and **Cancel** (closes the dialog and discards any unsaved changes) |
+| **Settings** | Shows **General** (Language and data folder), **Stock Quotes** (refresh interval), **Stock Fee** (stamp duty rate, trade fee rate, minimum trade fee), and **Price Change Alert** (Gain and Loss thresholds) groups. All changes are staged in the dialog and only take effect after **Save**; the dialog also offers **Default** (resets the in-progress draft to the built-in defaults, without applying it) and **Cancel** (closes the dialog and discards any unsaved changes) |
 | **About** | Shows the dialog title **About Little V** followed by the app version (**Version `X.Y.Z`**) in a smaller font, and a short application description |
 
 At the far right of the menu bar, a **Total profit** indicator shows the sum of Profit (see §6.3 for the formula) across all currently visible rows (i.e. after applying the Filters).
