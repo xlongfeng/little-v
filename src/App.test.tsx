@@ -711,6 +711,13 @@ describe("App", () => {
     expect(popup.querySelector(".current-quote-reference-profit")).toHaveTextContent("+42.00");
     expect(popup.querySelector(".current-quote-reference-change")).toHaveTextContent("+0.42 / +4.20%");
     expect(popup.querySelector(".current-quote-reference")).toHaveClass("price-gain");
+    // 10.42 is closest to the +4% step (10.00 * 1.04 = 10.40) among all up/down steps.
+    const nearestCell = popup.querySelector("td.nearest-price") as HTMLElement;
+    expect(nearestCell).toHaveTextContent("10.40");
+    expect(nearestCell).toHaveClass("price-gain");
+    const nearestHeader = popup.querySelector("th.nearest-price") as HTMLElement;
+    expect(nearestHeader).toHaveTextContent("+4%");
+    expect(nearestHeader).toHaveClass("price-gain");
   });
 
   it("colors the dated and undated Buy and Sell candidates independently for Price Change Alert", async () => {

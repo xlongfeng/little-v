@@ -449,6 +449,15 @@ function PriceCell({
   }
   const precision = pricePrecision(code);
   const quote = quotes[code];
+  const nearestStep = quote
+    ? [...UP_STEPS, ...DOWN_STEPS].reduce<{ pct: number | null; diff: number }>(
+        (best, pct) => {
+          const diff = Math.abs(price * (1 + pct / 100) - quote.now);
+          return diff < best.diff ? { pct, diff } : best;
+        },
+        { pct: null, diff: Infinity },
+      ).pct
+    : null;
   return (
     <td className={`price-cell${alertClass ? ` ${alertClass}` : ""}`} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
       {price.toFixed(precision)}
@@ -468,14 +477,14 @@ function PriceCell({
             <thead>
               <tr>
                 {UP_STEPS.map((pct) => (
-                  <th key={pct}>+{pct}%</th>
+                  <th key={pct} className={pct === nearestStep ? "nearest-price price-gain" : ""}>+{pct}%</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               <tr>
                 {UP_STEPS.map((pct) => (
-                  <td key={pct}>{(price * (1 + pct / 100)).toFixed(precision)}</td>
+                  <td key={pct} className={pct === nearestStep ? "nearest-price price-gain" : ""}>{(price * (1 + pct / 100)).toFixed(precision)}</td>
                 ))}
               </tr>
             </tbody>
@@ -484,14 +493,14 @@ function PriceCell({
             <thead>
               <tr>
                 {DOWN_STEPS.map((pct) => (
-                  <th key={pct}>{pct}%</th>
+                  <th key={pct} className={pct === nearestStep ? "nearest-price price-loss" : ""}>{pct}%</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               <tr>
                 {DOWN_STEPS.map((pct) => (
-                  <td key={pct}>{(price * (1 + pct / 100)).toFixed(precision)}</td>
+                  <td key={pct} className={pct === nearestStep ? "nearest-price price-loss" : ""}>{(price * (1 + pct / 100)).toFixed(precision)}</td>
                 ))}
               </tr>
             </tbody>
