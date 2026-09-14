@@ -163,13 +163,7 @@ A status bar at the bottom of the window shows the sum of Profit for currently v
 ### 6.2 Filters
 
 - Appears directly below the menu bar as a **Filters** toolbar.
-- **Names**: an Excel-style dropdown checklist of available stock names.
-  - Includes an **All** checkbox that toggles every stock name at once.
-  - Each stock name has a checkbox.
-  - Checked names remain visible in the trading record table; unchecked names are hidden.
-  - The name list is generated from the loaded ledger rows.
-  - The collapsed summary shows **All** when every name is checked, otherwise **`N` selected**.
-  - Clicking outside the checklist closes it.
+- **Names**: a dropdown to show **All** or a single stock name; selecting a stock name shows only that stock's rows, generated from the loaded ledger rows.
 - **Status**: a dropdown to show **All**, **Open only** (missing quantity, a buy price/date, or a sell price/date), or **Closed only** (has quantity, buy price, buy date, sell price, and sell date all present).
 - **Period**: a dropdown to show **All**, **Last 6 months**, **Last year**, or **Last 2 years**, based on the most recent of a row's buy date and sell date. Rows with neither a buy date nor a sell date are always included, regardless of the selected period.
 - All three filters combine (AND) to determine the visible rows.

@@ -68,7 +68,7 @@ describe("App", () => {
   it("shows the app version in a smaller font appended to the About dialog title", async () => {
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "About" }));
 
@@ -82,7 +82,7 @@ describe("App", () => {
   it("defaults to Chinese when the OS/browser language is Chinese", async () => {
     const languageSpy = vi.spyOn(window.navigator, "language", "get").mockReturnValue("zh-CN");
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     expect(screen.getByRole("button", { name: "新建" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "设置" })).toBeInTheDocument();
@@ -94,7 +94,7 @@ describe("App", () => {
   it("lets the user switch language in Settings and persists the choice", async () => {
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     await user.selectOptions(screen.getByLabelText("Language"), "zh_cn");
@@ -111,7 +111,7 @@ describe("App", () => {
     const languageSpy = vi.spyOn(window.navigator, "language", "get").mockReturnValue("zh-CN");
     try {
       render(<App />);
-      expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+      expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
       // OS is Chinese, so the app should start in Chinese with "system" preselected.
       await user.click(screen.getByRole("button", { name: "设置" }));
@@ -134,15 +134,46 @@ describe("App", () => {
     }
   });
 
-  it("filters the combined ledger table by checked stock names", async () => {
+  it("filters the combined ledger table to a single selected stock name", async () => {
+    invoke.mockResolvedValue([
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [
+          {
+            uuid: "buy",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            buyPrice: 10,
+            buyDate: "2026-09-01",
+          },
+        ],
+      },
+      {
+        code: "SZ000001",
+        name: "Second Bank",
+        transactions: [
+          {
+            uuid: "buy-2",
+            createDate: "2",
+            modifyDate: "2",
+            quantity: 100,
+            buyPrice: 10,
+            buyDate: "2026-09-01",
+          },
+        ],
+      },
+    ]);
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Second Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Names" }));
-    await user.click(screen.getByRole("checkbox", { name: "Example Bank" }));
+    await user.selectOptions(screen.getByLabelText("Names"), "Example Bank");
 
-    expect(screen.getByText(/No trading records yet/)).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /Example Bank/ })).toBeInTheDocument();
+    expect(screen.queryByText("Second Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
   });
 
   it("shows a comment indicator next to the stock name with the note text as a tooltip", async () => {
@@ -164,7 +195,7 @@ describe("App", () => {
       },
     ]);
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     const indicator = screen.getByLabelText("Note: Watch earnings guidance");
     expect(indicator).toBeInTheDocument();
@@ -173,7 +204,7 @@ describe("App", () => {
 
   it("does not show a comment indicator when a transaction has no note", async () => {
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     expect(screen.queryByText("💬")).not.toBeInTheDocument();
   });
@@ -203,7 +234,7 @@ describe("App", () => {
       return Promise.resolve(ledgers);
     });
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Delete transaction" }));
     const dialog = screen.getByRole("dialog", { name: "Delete transaction" });
@@ -218,7 +249,7 @@ describe("App", () => {
   it("does not delete a transaction when the confirmation dialog is cancelled", async () => {
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Delete transaction" }));
     const dialog = screen.getByRole("dialog", { name: "Delete transaction" });
@@ -253,7 +284,7 @@ describe("App", () => {
       return Promise.resolve(ledgers);
     });
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Delete transaction" }));
     const dialog = screen.getByRole("dialog", { name: "Delete transaction" });
@@ -266,7 +297,7 @@ describe("App", () => {
   it("opens a pre-filled edit dialog with a locked stock field when a row is double-clicked", async () => {
     const user = userEvent.setup();
     render(<App />);
-    const row = (await screen.findByText("Example Bank")).closest("tr");
+    const row = (await screen.findByText("Example Bank", { selector: ".stock-name" })).closest("tr");
     expect(row).not.toBeNull();
 
     await user.dblClick(row as HTMLElement);
@@ -346,7 +377,7 @@ describe("App", () => {
       SH600000: { code: "SH600000", now: 10.42, yesterday: 9, percent: 0.1578 },
     });
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
     await waitFor(() => expect(fetchQuotes).toHaveBeenCalled());
 
     await user.click(screen.getByRole("button", { name: "Create" }));
@@ -357,7 +388,7 @@ describe("App", () => {
     expect(createQuote.closest(".stock-combobox")).not.toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    const row = screen.getByText("Example Bank").closest("tr") as HTMLElement;
+    const row = screen.getByText("Example Bank", { selector: ".stock-name" }).closest("tr") as HTMLElement;
     await user.dblClick(row);
     expect(screen.getByText("10.42 / +15.78%").closest(".stock-combobox")).not.toBeNull();
   });
@@ -386,7 +417,7 @@ describe("App", () => {
       ]);
     });
     render(<App />);
-    const row = (await screen.findByText("Example Bank")).closest("tr");
+    const row = (await screen.findByText("Example Bank", { selector: ".stock-name" })).closest("tr");
 
     await user.dblClick(row as HTMLElement);
     expect(screen.getByRole("heading", { name: "Edit transaction" })).toBeInTheDocument();
@@ -412,7 +443,7 @@ describe("App", () => {
   it("does not call update_transaction when the edit dialog is cancelled", async () => {
     const user = userEvent.setup();
     render(<App />);
-    const row = (await screen.findByText("Example Bank")).closest("tr");
+    const row = (await screen.findByText("Example Bank", { selector: ".stock-name" })).closest("tr");
 
     await user.dblClick(row as HTMLElement);
     expect(screen.getByRole("heading", { name: "Edit transaction" })).toBeInTheDocument();
@@ -422,17 +453,47 @@ describe("App", () => {
     expect(invoke).not.toHaveBeenCalledWith("update_transaction", expect.anything());
   });
 
-  it("toggles all quick-filter names with All", async () => {
+  it("shows every stock again when All is selected in the Names filter", async () => {
+    invoke.mockResolvedValue([
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [
+          {
+            uuid: "buy",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            buyPrice: 10,
+            buyDate: "2026-09-01",
+          },
+        ],
+      },
+      {
+        code: "SZ000001",
+        name: "Second Bank",
+        transactions: [
+          {
+            uuid: "buy-2",
+            createDate: "2",
+            modifyDate: "2",
+            quantity: 100,
+            buyPrice: 10,
+            buyDate: "2026-09-01",
+          },
+        ],
+      },
+    ]);
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Names" }));
-    await user.click(screen.getByRole("checkbox", { name: "All" }));
-    expect(screen.getByText(/No trading records yet/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Names"), "Example Bank");
+    expect(screen.queryByText("Second Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("checkbox", { name: "All" }));
+    await user.selectOptions(screen.getByLabelText("Names"), "All");
     expect(screen.getByRole("row", { name: /Example Bank/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /Second Bank/ })).toBeInTheDocument();
   });
 
   it("shows three decimal places for ETF and LOF prices, and two for ordinary stocks", async () => {
@@ -467,7 +528,7 @@ describe("App", () => {
       },
     ]);
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     expect(screen.getByText("10.50")).toBeInTheDocument();
     expect(screen.getByText("3.456")).toBeInTheDocument();
@@ -487,7 +548,7 @@ describe("App", () => {
     render(<App />);
 
     const name = await screen.findByText("Example");
-    expect(screen.queryByText("Example ETF")).not.toBeInTheDocument();
+    expect(screen.queryByText("Example ETF", { selector: ".stock-name" })).not.toBeInTheDocument();
 
     fireEvent.mouseEnter(name);
     const tooltip = await screen.findByRole("tooltip");
@@ -531,8 +592,8 @@ describe("App", () => {
 
     expect(await screen.findByText("Example")).toBeInTheDocument();
     expect(screen.getByText("Sample")).toBeInTheDocument();
-    expect(screen.queryByText("Example ETF Fund")).not.toBeInTheDocument();
-    expect(screen.queryByText("Sample LOF Fund")).not.toBeInTheDocument();
+    expect(screen.queryByText("Example ETF Fund", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Sample LOF Fund", { selector: ".stock-name" })).not.toBeInTheDocument();
   });
 
   it("shows a fluctuation range popup after hovering a price cell for a moment", async () => {
@@ -553,7 +614,7 @@ describe("App", () => {
       },
     ]);
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
@@ -588,7 +649,7 @@ describe("App", () => {
     });
     try {
       render(<App />);
-      expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+      expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
       fireEvent.mouseEnter(screen.getByText("10.00").closest("td") as HTMLElement);
 
@@ -604,7 +665,7 @@ describe("App", () => {
       SH600000: { code: "SH600000", now: 10.42, yesterday: 9, percent: 0.1578 },
     });
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     fireEvent.mouseEnter(screen.getByText("10.00").closest("td") as HTMLElement);
     const popup = await screen.findByRole("tooltip");
@@ -648,7 +709,7 @@ describe("App", () => {
   it("saves configurable Price Change Alert percentages", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText("Example Bank");
+    await screen.findByText("Example Bank", { selector: ".stock-name" });
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(screen.getByLabelText("Gain (%)")).toHaveValue(3);
@@ -685,7 +746,7 @@ describe("App", () => {
       SH600000: { code: "SH600000", now: 10.42, yesterday: 9, percent: 0.1578 },
     });
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     fireEvent.mouseEnter(screen.getByText("12.00").closest("td") as HTMLElement);
     const popup = await screen.findByRole("tooltip");
@@ -729,10 +790,10 @@ describe("App", () => {
       },
     ]);
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
-    const openRow = screen.getByText("Example Bank").closest("tr");
-    const closedRow = screen.getByText("Second Bank").closest("tr");
+    const openRow = screen.getByText("Example Bank", { selector: ".stock-name" }).closest("tr");
+    const closedRow = screen.getByText("Second Bank", { selector: ".stock-name" }).closest("tr");
     expect(openRow).not.toHaveClass("closed-row");
     expect(closedRow).toHaveClass("closed-row");
   });
@@ -785,14 +846,14 @@ describe("App", () => {
       },
     ]);
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     // buyFee = 5*50*0.00025 = 0.0625 -> min fee 5; sellFee = 6*50*0.00025 = 0.075 -> min fee 5
     // stampFee = 6*50*0.0005 = 0.15; gross = (6-5)*50 = 50; net = 50 - 5 - 5 - 0.15 = 39.85
     const profitCells = await screen.findAllByText("39.85");
     expect(profitCells).toHaveLength(2);
 
-    const openRow = screen.getByText("Example Bank").closest("tr") as HTMLElement;
+    const openRow = screen.getByText("Example Bank", { selector: ".stock-name" }).closest("tr") as HTMLElement;
     const cells = within(openRow).getAllByRole("cell");
     expect(cells[6]).toHaveTextContent("");
   });
@@ -859,7 +920,7 @@ describe("App", () => {
       },
     ]);
     render(<App />);
-    expect(await screen.findByText("Second Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Second Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     // Each row nets 39.85, so the total across both visible rows is 79.70.
     const filterBar = document.querySelector(".filter-bar") as HTMLElement;
@@ -901,7 +962,7 @@ describe("App", () => {
     });
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText("Second Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Second Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     const statusBar = document.querySelector(".status-bar") as HTMLElement;
     expect(within(statusBar).getByTitle("Total profit")).toHaveTextContent("39.85");
@@ -921,7 +982,7 @@ describe("App", () => {
   it("saves a configured data folder without moving application settings from localStorage", async () => {
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     const dataDirectory = screen.getByLabelText("Data folder");
@@ -967,7 +1028,7 @@ describe("App", () => {
     });
 
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
     ledgers = [
       {
         code: "SZ000001",
@@ -984,14 +1045,14 @@ describe("App", () => {
     ];
     notifyLedgerChange?.();
 
-    expect(await screen.findByText("Changed Bank")).toBeInTheDocument();
-    expect(screen.queryByText("Example Bank")).not.toBeInTheDocument();
+    expect(await screen.findByText("Changed Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.queryByText("Example Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
   });
 
   it("discards Settings changes without applying them when Cancel is clicked", async () => {
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     await user.selectOptions(screen.getByLabelText("Language"), "zh_cn");
@@ -1055,19 +1116,19 @@ describe("App", () => {
     ]);
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText("Example Bank")).toBeInTheDocument();
-    expect(screen.getByText("Second Bank")).toBeInTheDocument();
-    expect(screen.getByText("Third Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Second Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Third Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Status" }), "Open only");
-    expect(screen.getByText("Example Bank")).toBeInTheDocument();
-    expect(screen.getByText("Third Bank")).toBeInTheDocument();
-    expect(screen.queryByText("Second Bank")).not.toBeInTheDocument();
+    expect(screen.getByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Third Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.queryByText("Second Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Status" }), "Closed only");
-    expect(screen.queryByText("Example Bank")).not.toBeInTheDocument();
-    expect(screen.queryByText("Third Bank")).not.toBeInTheDocument();
-    expect(screen.getByText("Second Bank")).toBeInTheDocument();
+    expect(screen.queryByText("Example Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Third Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.getByText("Second Bank", { selector: ".stock-name" })).toBeInTheDocument();
   });
 
   it("treats a transaction with an explicit null quantity as open even when prices and dates are present", async () => {
@@ -1091,13 +1152,13 @@ describe("App", () => {
     ]);
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText("Fourth Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Fourth Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Status" }), "Open only");
-    expect(screen.getByText("Fourth Bank")).toBeInTheDocument();
+    expect(screen.getByText("Fourth Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Status" }), "Closed only");
-    expect(screen.queryByText("Fourth Bank")).not.toBeInTheDocument();
+    expect(screen.queryByText("Fourth Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
   });
 
   it("filters rows by period using the most recent buy or sell date", async () => {
@@ -1133,12 +1194,12 @@ describe("App", () => {
     ]);
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText("Old Bank")).toBeInTheDocument();
-    expect(screen.getByText("Recent Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Old Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Recent Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Period" }), "Last 6 months");
-    expect(screen.queryByText("Old Bank")).not.toBeInTheDocument();
-    expect(screen.getByText("Recent Bank")).toBeInTheDocument();
+    expect(screen.queryByText("Old Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.getByText("Recent Bank", { selector: ".stock-name" })).toBeInTheDocument();
   });
 
   it("keeps rows with no buy or sell date visible for any period filter", async () => {
@@ -1158,20 +1219,20 @@ describe("App", () => {
     ]);
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText("Dateless Bank")).toBeInTheDocument();
+    expect(await screen.findByText("Dateless Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Period" }), "Last 6 months");
-    expect(screen.getByText("Dateless Bank")).toBeInTheDocument();
+    expect(screen.getByText("Dateless Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Period" }), "Last 2 years");
-    expect(screen.getByText("Dateless Bank")).toBeInTheDocument();
+    expect(screen.getByText("Dateless Bank", { selector: ".stock-name" })).toBeInTheDocument();
   });
 
   it("replaces local options with API matches and restores them for an empty Enter search", async () => {
     const user = userEvent.setup();
     searchStocks.mockResolvedValue([{ code: "SZ000001", name: "Search Result" }]);
     render(<App />);
-    await screen.findByText("Example Bank");
+    await screen.findByText("Example Bank", { selector: ".stock-name" });
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     const stockInput = screen.getByRole("combobox", { name: "Stock" });
@@ -1188,7 +1249,7 @@ describe("App", () => {
   it("closes the stock list when clicking outside the combobox", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText("Example Bank");
+    await screen.findByText("Example Bank", { selector: ".stock-name" });
     await user.click(screen.getByRole("button", { name: "Create" }));
     await user.click(screen.getByRole("button", { name: "Show existing stocks" }));
     expect(screen.getByRole("listbox")).toBeInTheDocument();
@@ -1453,9 +1514,9 @@ describe("App", () => {
     ]);
     render(<App />);
 
-    const buyRow = (await screen.findByText("Missing Buy Date")).closest("tr") as HTMLTableRowElement;
-    const sellRow = screen.getByText("Missing Sell Date").closest("tr") as HTMLTableRowElement;
-    const completeRow = screen.getByText("Complete Dates").closest("tr") as HTMLTableRowElement;
+    const buyRow = (await screen.findByText("Missing Buy Date", { selector: ".stock-name" })).closest("tr") as HTMLTableRowElement;
+    const sellRow = screen.getByText("Missing Sell Date", { selector: ".stock-name" }).closest("tr") as HTMLTableRowElement;
+    const completeRow = screen.getByText("Complete Dates", { selector: ".stock-name" }).closest("tr") as HTMLTableRowElement;
 
     expect(buyRow.cells[3]).toHaveClass("missing-date");
     expect(sellRow.cells[5]).toHaveClass("missing-date");

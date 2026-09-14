@@ -619,8 +619,7 @@ function AppContent() {
   const { profitSettings, setProfitSettings } = useProfitSettings();
   const [priceAlertSettings, setPriceAlertSettings] = useState<PriceAlertSettings>(loadPriceAlertSettings);
   const [ledgers, setLedgers] = useState<StockLedger[]>([]);
-  const [excludedFilterNames, setExcludedFilterNames] = useState<string[]>([]);
-  const [nameFilterOpen, setNameFilterOpen] = useState(false);
+  const [selectedStockName, setSelectedStockName] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -637,7 +636,6 @@ function AppContent() {
   const [deleteError, setDeleteError] = useState("");
   const [pendingDelete, setPendingDelete] = useState<{ code: string; uuid: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const nameFilterRef = useRef<HTMLDivElement>(null);
 
   function openSettings() {
     clearLanguagePreview();
@@ -808,7 +806,7 @@ function AppContent() {
   const rows = useMemo(() => {
     const cutoff = periodCutoff(periodFilter);
     return allRows.filter((row) => {
-      if (excludedFilterNames.includes(row.name)) {
+      if (selectedStockName !== null && row.name !== selectedStockName) {
         return false;
       }
       const isClosed = isRowClosed(row);
@@ -826,41 +824,15 @@ function AppContent() {
       }
       return true;
     });
-  }, [allRows, excludedFilterNames, statusFilter, periodFilter]);
+  }, [allRows, selectedStockName, statusFilter, periodFilter]);
   const alerts = useMemo(
     () => priceAlertClasses(allRows, quotes, priceAlertSettings),
     [allRows, quotes, priceAlertSettings],
   );
-  const selectedFilterCount = filterNames.length - excludedFilterNames.length;
 
   useEffect(() => {
-    setExcludedFilterNames((names) => names.filter((name) => filterNames.includes(name)));
+    setSelectedStockName((name) => (name !== null && !filterNames.includes(name) ? null : name));
   }, [filterNames]);
-
-  useEffect(() => {
-    if (!nameFilterOpen) {
-      return;
-    }
-
-    const closeWhenClickedOutside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !nameFilterRef.current?.contains(event.target)) {
-        setNameFilterOpen(false);
-      }
-    };
-
-    document.addEventListener("pointerdown", closeWhenClickedOutside);
-    return () => document.removeEventListener("pointerdown", closeWhenClickedOutside);
-  }, [nameFilterOpen]);
-
-  function toggleFilterName(name: string, checked: boolean) {
-    setExcludedFilterNames((names) =>
-      checked ? names.filter((currentName) => currentName !== name) : [...names, name],
-    );
-  }
-
-  function toggleAllFilterNames(checked: boolean) {
-    setExcludedFilterNames(checked ? [] : filterNames);
-  }
 
   const [deleteConfirmBefore, deleteConfirmAfter] = t("deleteDialog.confirm").split("{name}");
 
@@ -876,40 +848,15 @@ function AppContent() {
       </header>
 
       <section className="filter-bar" aria-label={t("table.recordControls")}>
-        <span className="filter-label">{t("filters.label")}</span>
-        <div className="name-filter" ref={nameFilterRef}>
-          <button
-            type="button"
-            aria-label={t("filters.names")}
-            aria-expanded={nameFilterOpen}
-            onClick={() => setNameFilterOpen((open) => !open)}
-          >
-            {filterNames.length === selectedFilterCount ? t("filters.all") : t("filters.selected", { count: selectedFilterCount })}
-          </button>
-          {nameFilterOpen && (
-            <div className="name-filter-menu" role="group" aria-label={t("filters.filterByNames")}>
-              <label className="select-all-filter">
-                <input
-                  type="checkbox"
-                  checked={filterNames.length > 0 && selectedFilterCount === filterNames.length}
-                  onChange={(event) => toggleAllFilterNames(event.target.checked)}
-                />
-                {t("filters.all")}
-              </label>
-              {filterNames.map((name) => (
-                <label key={name}>
-                  <input
-                    type="checkbox"
-                    checked={!excludedFilterNames.includes(name)}
-                    onChange={(event) => toggleFilterName(name, event.target.checked)}
-                  />
-                  {name}
-                </label>
-              ))}
-              {!filterNames.length && <p>{t("filters.noNames")}</p>}
-            </div>
-          )}
-        </div>
+        <label className="inline-filter">
+          {t("filters.names")}
+          <select aria-label={t("filters.names")} value={selectedStockName ?? "all"} onChange={(event) => setSelectedStockName(event.target.value === "all" ? null : event.target.value)}>
+            <option value="all">{t("filters.all")}</option>
+            {filterNames.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </label>
         <label className="inline-filter">
           {t("filters.status")}
           <select aria-label={t("filters.status")} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
