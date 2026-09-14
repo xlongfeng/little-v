@@ -98,7 +98,9 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | **Settings** | Shows **General** (Language and data folder), **Stock Quotes** (refresh interval), **Stock Fee** (stamp duty rate, trade fee rate, minimum trade fee), and **Price Change Alert** (Gain and Loss thresholds) groups. All changes are staged in the dialog and only take effect after **Save**; the dialog also offers **Default** (resets the in-progress draft to the built-in defaults, without applying it) and **Cancel** (closes the dialog and discards any unsaved changes) |
 | **About** | Shows the dialog title **About Little V** followed by the app version (**Version `X.Y.Z`**) in a smaller font, and a short application description |
 
-At the far right of the menu bar, a **Total profit** indicator shows the sum of Profit (see §6.3 for the formula) across all currently visible rows (i.e. after applying the Filters).
+At the far right of the Filters bar, the count of currently visible rows (i.e. after applying the Filters) is shown, such as `0 records`.
+
+A status bar at the bottom of the window shows the sum of Profit for currently visible rows (see §6.3 for the formula), right-aligned. Hovering the profit value shows a **Total profit** tooltip.
 
 ### 6.1.1 Language / localization
 
@@ -142,7 +144,7 @@ At the far right of the menu bar, a **Total profit** indicator shows the sum of 
 | Trade fee rate (%) | `0.025` | Percentage; stored internally as a decimal (`0.00025`) |
 | Minimum trade fee | `5` | Flat currency amount per side |
 
-- Changed values apply to the Profit column and the menu bar's Total profit indicator immediately after **Save**, and are persisted in browser `localStorage` (`littlev-profit-settings`).
+- Changed values apply to the Profit column and the status bar's profit summary immediately after **Save**, and are persisted in browser `localStorage` (`littlev-profit-settings`).
 
 ### 6.1.6 Price Change Alert settings
 

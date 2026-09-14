@@ -89,8 +89,10 @@ describe("defaultLanguagePreference", () => {
 
 describe("translate", () => {
   it("interpolates variables into the template", () => {
-    expect(translate("en", "totalProfit", { value: "12.34" })).toBe("Total profit: 12.34");
-    expect(translate("zh_cn", "totalProfit", { value: "12.34" })).toBe("总盈亏：12.34");
+    expect(translate("en", "totalProfit", { value: "12.34" })).toBe("12.34");
+    expect(translate("zh_cn", "totalProfit", { value: "12.34" })).toBe("12.34");
+    expect(translate("en", "totalProfit.tooltip")).toBe("Total profit");
+    expect(translate("zh_cn", "totalProfit.tooltip")).toBe("总利润");
   });
 
   it("falls back to the raw key for an unknown translation key", () => {

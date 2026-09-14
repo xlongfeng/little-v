@@ -818,14 +818,14 @@ describe("App", () => {
     ]);
     render(<App />);
 
-    const profitCell = (await screen.findByText("189.40")).closest("td") as HTMLElement;
+    const profitCell = (await screen.findAllByText("189.40")).find((el) => el.closest("td"))!.closest("td") as HTMLElement;
     fireEvent.mouseEnter(profitCell);
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent("+18.94%");
     expect(tooltip).toHaveClass("price-gain");
   });
 
-  it("shows the sum of visible rows' profit at the end of the menu bar", async () => {
+  it("shows the sum of visible rows' profit in the status bar", async () => {
     invoke.mockResolvedValue([
       {
         code: "SZ000001",
@@ -862,8 +862,10 @@ describe("App", () => {
     expect(await screen.findByText("Second Bank")).toBeInTheDocument();
 
     // Each row nets 39.85, so the total across both visible rows is 79.70.
-    const menuBar = document.querySelector(".menu-bar") as HTMLElement;
-    expect(within(menuBar).getByText("Total profit: 79.70")).toBeInTheDocument();
+    const filterBar = document.querySelector(".filter-bar") as HTMLElement;
+    expect(filterBar).toHaveTextContent("2 records");
+    const statusBar = document.querySelector(".status-bar") as HTMLElement;
+    expect(within(statusBar).getByTitle("Total profit")).toHaveTextContent("79.70");
   });
 
   it("recomputes the Profit column and total after saving Stock Fee settings", async () => {
@@ -901,8 +903,8 @@ describe("App", () => {
     render(<App />);
     expect(await screen.findByText("Second Bank")).toBeInTheDocument();
 
-    const menuBar = document.querySelector(".menu-bar") as HTMLElement;
-    expect(within(menuBar).getByText("Total profit: 39.85")).toBeInTheDocument();
+    const statusBar = document.querySelector(".status-bar") as HTMLElement;
+    expect(within(statusBar).getByTitle("Total profit")).toHaveTextContent("39.85");
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     const feeRateInput = screen.getByLabelText("Trade fee rate (%)");
@@ -912,7 +914,7 @@ describe("App", () => {
 
     // With a much higher fee rate, net profit drops below the previous total.
     await waitFor(() =>
-      expect(within(menuBar).queryByText("Total profit: 39.85")).not.toBeInTheDocument(),
+      expect(within(statusBar).getByTitle("Total profit")).not.toHaveTextContent("39.85"),
     );
   });
 

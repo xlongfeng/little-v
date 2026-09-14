@@ -873,7 +873,6 @@ function AppContent() {
           <button type="button" onClick={openSettings}>{t("menu.settings")}</button>
           <button type="button" onClick={() => setAboutOpen(true)}>{t("menu.about")}</button>
         </nav>
-        <span className="total-profit">{t("totalProfit", { value: formatTotalProfit(rows, profitSettings) })}</span>
       </header>
 
       <section className="filter-bar" aria-label={t("table.recordControls")}>
@@ -995,6 +994,10 @@ function AppContent() {
           </tbody>
         </table>
       </section>
+
+      <footer className="status-bar" aria-label={t("table.statusBar")}>
+        <span title={t("totalProfit.tooltip")}>{formatTotalProfit(rows, profitSettings)}</span>
+      </footer>
 
       {dialogOpen && (
         <TransactionDialog

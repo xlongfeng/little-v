@@ -6,7 +6,6 @@ button { border: 1px solid #c0c0c0; border-radius: 2px; background: #fff; cursor
 button:hover { background: #e6e6e6; }
 .app-shell { height: 100vh; display: flex; flex-direction: column; }
 .menu-bar { flex-shrink: 0; height: 48px; display: flex; align-items: center; gap: 30px; padding: 0 24px; color: #212121; background: #f3f3f3; border-bottom: 1px solid #c0c0c0; }
-.menu-bar .total-profit { margin-left: auto; }
 .brand { font-weight: 700; font-size: 18px; letter-spacing: .01em; color: #185abd; }
 .menu-bar nav { display: flex; gap: 6px; }
 .menu-bar button { color: #212121; background: transparent; border: 1px solid transparent; border-radius: 2px; }
@@ -15,6 +14,7 @@ button:hover { background: #e6e6e6; }
 .filter-label { font-weight: 700; }
 .filter-bar span { margin-left: auto; color: #4d4d4d; font-size: 14px; }
 .filter-bar .filter-label { margin-left: 0; color: #4d4d4d; font-size: 14px; }
+.status-bar { flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 0 24px; height: 28px; color: #4d4d4d; background: #f3f3f3; border-top: 1px solid #c0c0c0; }
 .name-filter { position: relative; }
 .name-filter > button { min-width: 180px; text-align: left; background: #fff; }
 .name-filter-menu { position: absolute; z-index: 2; top: calc(100% + 4px); left: 0; min-width: 230px; max-height: 260px; overflow-y: auto; padding: 8px; border: 1px solid #b3b3b3; border-radius: 2px; background: #fff; box-shadow: 0 4px 10px #00000026; }
