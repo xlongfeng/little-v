@@ -20,7 +20,7 @@ import { DEFAULT_REFRESH_SECONDS, MIN_REFRESH_SECONDS, PriceFeedProvider, usePri
 import { ProfitSettingsProvider, useProfitSettings } from "./ProfitSettingsProvider";
 import "./App.css";
 
-type StatusFilter = "all" | "open" | "closed";
+type StatusFilter = "all" | "alerted" | "open" | "closed";
 type PeriodFilter = "all" | "6m" | "1y" | "2y";
 
 const PERIOD_MONTHS: Record<Exclude<PeriodFilter, "all">, number> = {
@@ -803,6 +803,10 @@ function AppContent() {
     () => [...new Set(allRows.map((row) => row.name))].sort((left, right) => left.localeCompare(right)),
     [allRows],
   );
+  const alerts = useMemo(
+    () => priceAlertClasses(allRows, quotes, priceAlertSettings),
+    [allRows, quotes, priceAlertSettings],
+  );
   const rows = useMemo(() => {
     const cutoff = periodCutoff(periodFilter);
     return allRows.filter((row) => {
@@ -810,6 +814,9 @@ function AppContent() {
         return false;
       }
       const isClosed = isRowClosed(row);
+      if (statusFilter === "alerted" && !alerts.get(row.key)) {
+        return false;
+      }
       if (statusFilter === "open" && isClosed) {
         return false;
       }
@@ -824,11 +831,7 @@ function AppContent() {
       }
       return true;
     });
-  }, [allRows, selectedStockName, statusFilter, periodFilter]);
-  const alerts = useMemo(
-    () => priceAlertClasses(allRows, quotes, priceAlertSettings),
-    [allRows, quotes, priceAlertSettings],
-  );
+  }, [allRows, selectedStockName, statusFilter, periodFilter, alerts]);
 
   useEffect(() => {
     setSelectedStockName((name) => (name !== null && !filterNames.includes(name) ? null : name));
@@ -861,6 +864,7 @@ function AppContent() {
           {t("filters.status")}
           <select aria-label={t("filters.status")} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
             <option value="all">{t("filters.all")}</option>
+            <option value="alerted">{t("filters.statusAlerted")}</option>
             <option value="open">{t("filters.statusOpen")}</option>
             <option value="closed">{t("filters.statusClosed")}</option>
           </select>

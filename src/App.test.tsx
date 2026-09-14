@@ -706,6 +706,35 @@ describe("App", () => {
     });
   });
 
+  it("filters the table to only rows with an active Price Change Alert when Alerted only is selected", async () => {
+    const user = userEvent.setup();
+    invoke.mockResolvedValue([
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [
+          { uuid: "dated-buy-loss", createDate: "1", modifyDate: "1", buyPrice: 10, buyDate: "2026-09-01" },
+          { uuid: "closed", createDate: "6", modifyDate: "6", quantity: 100, buyPrice: 9, buyDate: "2026-09-01", sellPrice: 14, sellDate: "2026-09-02" },
+        ],
+      },
+    ]);
+    fetchQuotes.mockResolvedValue({
+      SH600000: { code: "SH600000", now: 9, yesterday: 9, percent: 0 },
+    });
+    render(<App />);
+
+    await screen.findAllByText("Example Bank");
+    await waitFor(() => {
+      expect(screen.getByText("10.00").closest("td")).toHaveClass("price-alert-loss");
+    });
+
+    await user.selectOptions(screen.getByLabelText("Status"), "alerted");
+
+    expect(screen.getAllByText("Example Bank", { selector: ".stock-name" })).toHaveLength(1);
+    expect(screen.getByText("10.00")).toBeInTheDocument();
+    expect(screen.queryByText("9.00")).not.toBeInTheDocument();
+  });
+
   it("saves configurable Price Change Alert percentages", async () => {
     const user = userEvent.setup();
     render(<App />);
