@@ -249,6 +249,10 @@ function displayStockName(name: string): string {
   return name.replace(/(?:ETF|LOF).*$/i, "").trimEnd();
 }
 
+function displayStockCode(code: string): string {
+  return code.replace(/^[A-Za-z]+/, "");
+}
+
 function referenceChange(quote: StockQuote, referencePrice: number, isSellPrice: boolean): number {
   return isSellPrice ? referencePrice - quote.now : quote.now - referencePrice;
 }
@@ -577,7 +581,7 @@ function NameCell({ row }: { row: TableRow }) {
         {visible && (
           <div ref={tooltipRef} className={`name-tooltip${showAbove ? " name-tooltip-above" : ""}`} role="tooltip">
             <div>{row.name}</div>
-            <div>{row.code}</div>
+            <div>{displayStockCode(row.code)}</div>
             {quote && (
               <div className={quoteChangeClass(quote)}>
                 {quote.now.toFixed(pricePrecision(row.code))} / {formatQuotePercent(quote)}
@@ -1019,7 +1023,7 @@ function AppContent() {
           <select aria-label={t("filters.names")} value={selectedStockName ?? "all"} onChange={(event) => setSelectedStockName(event.target.value === "all" ? null : event.target.value)}>
             <option value="all">{t("filters.all")}</option>
             {filterNames.map((name) => (
-              <option key={name} value={name}>{name}</option>
+              <option key={name} value={name}>{displayStockName(name)}</option>
             ))}
           </select>
         </label>
@@ -1112,7 +1116,7 @@ function AppContent() {
       <footer className="status-bar" aria-label={t("table.statusBar")}>
         {stockSummary && (
           <span className="stock-summary">
-            <span className="stock-summary-name">{displayStockName(stockSummary.name)} ({stockSummary.code})</span>
+            <span className="stock-summary-name">{displayStockName(stockSummary.name)} ({displayStockCode(stockSummary.code)})</span>
             {quotes[stockSummary.code] && (
               <span className={quoteChangeClass(quotes[stockSummary.code])}>
                 {quotes[stockSummary.code].now.toFixed(pricePrecision(stockSummary.code))} / {formatQuotePercent(quotes[stockSummary.code])}
@@ -1365,7 +1369,7 @@ function TransactionDialog({
   const { t } = useLanguage();
   const { quotes } = usePriceFeed();
   const [form, setForm] = useState(() => (editing ? formFromRow(editing) : initialForm()));
-  const [stockQuery, setStockQuery] = useState(() => (editing ? `${editing.name} (${editing.code})` : ""));
+  const [stockQuery, setStockQuery] = useState(() => (editing ? `${editing.name} (${displayStockCode(editing.code)})` : ""));
   const [searchResults, setSearchResults] = useState<StockOption[] | null>(null);
   const [stockListOpen, setStockListOpen] = useState(false);
   const [searchError, setSearchError] = useState("");
@@ -1417,7 +1421,7 @@ function TransactionDialog({
 
   function selectStock(stock: StockOption) {
     setForm({ ...form, stock });
-    setStockQuery(`${stock.name} (${stock.code})`);
+    setStockQuery(`${stock.name} (${displayStockCode(stock.code)})`);
     setStockListOpen(false);
   }
 
@@ -1549,7 +1553,7 @@ function TransactionDialog({
                 {choices.map((stock) => (
                   <li key={stock.code} role="option" aria-selected={form.stock?.code === stock.code}>
                     <button type="button" onClick={() => selectStock(stock)}>
-                      {stock.name} <span>({stock.code})</span>
+                      {stock.name} <span>({displayStockCode(stock.code)})</span>
                     </button>
                   </li>
                 ))}

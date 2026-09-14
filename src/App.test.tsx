@@ -339,7 +339,7 @@ describe("App", () => {
 
     expect(screen.getByRole("heading", { name: "Edit transaction" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Stock" })).toBeDisabled();
-    expect(screen.getByRole("combobox", { name: "Stock" })).toHaveValue("Example Bank (SH600000)");
+    expect(screen.getByRole("combobox", { name: "Stock" })).toHaveValue("Example Bank (600000)");
     expect(screen.getByLabelText("Quantity")).toHaveValue(100);
     expect(screen.getByLabelText("Buy price")).toHaveValue(10);
     expect(screen.getByLabelText("Buy date")).toHaveValue("2026-09-01");
@@ -417,7 +417,7 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Create" }));
     await user.click(screen.getByRole("button", { name: "Show existing stocks" }));
-    await user.click(screen.getByRole("button", { name: "Example Bank (SH600000)" }));
+    await user.click(screen.getByRole("button", { name: "Example Bank (600000)" }));
     const createQuote = await screen.findByText("10.42 / +15.78%");
     expect(createQuote).toHaveClass("stock-current-quote");
     expect(createQuote.closest(".stock-combobox")).not.toBeNull();
@@ -582,13 +582,13 @@ describe("App", () => {
     });
     render(<App />);
 
-    const name = await screen.findByText("Example");
+    const name = await screen.findByText("Example", { selector: ".stock-name" });
     expect(screen.queryByText("Example ETF", { selector: ".stock-name" })).not.toBeInTheDocument();
 
     fireEvent.mouseEnter(name);
     const tooltip = await screen.findByRole("tooltip");
     expect(within(tooltip).getByText("Example ETF")).toBeInTheDocument();
-    expect(within(tooltip).getByText("SH510300")).toBeInTheDocument();
+    expect(within(tooltip).getByText("510300")).toBeInTheDocument();
     expect(within(tooltip).getByText("3.456 / +1.65%")).toHaveClass("price-gain");
   });
 
@@ -625,8 +625,8 @@ describe("App", () => {
     ]);
     render(<App />);
 
-    expect(await screen.findByText("Example")).toBeInTheDocument();
-    expect(screen.getByText("Sample")).toBeInTheDocument();
+    expect(await screen.findByText("Example", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Sample", { selector: ".stock-name" })).toBeInTheDocument();
     expect(screen.queryByText("Example ETF Fund", { selector: ".stock-name" })).not.toBeInTheDocument();
     expect(screen.queryByText("Sample LOF Fund", { selector: ".stock-name" })).not.toBeInTheDocument();
   });
