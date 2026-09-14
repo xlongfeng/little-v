@@ -168,12 +168,13 @@ A status bar at the bottom of the window shows the sum of Profit for currently v
 - **Period**: a dropdown to show **All**, **Last 6 months**, **Last year**, or **Last 2 years**, based on the most recent of a row's buy date and sell date. Rows with neither a buy date nor a sell date are always included, regardless of the selected period.
 - All three filters combine (AND) to determine the visible rows.
 - Displays the number of matching records.
+- Once a row is shown under the active filters, editing it does not remove it from view even if the edit makes it stop matching; it stays pinned until a filter dropdown is changed (any selection change), at which point the filters are re-applied from scratch. Deleting a row always removes it immediately, regardless of filters.
 
 ### 6.3 Trading record table
 
 - Shows one row per transaction.
 - A transaction with only a buy side shows empty sell values; one with only a sell side shows empty buy values.
-- Rows are sorted by stock name, then ascending Buy Price; rows without a Buy Price use their Sell Price instead, and rows without either price sort first within their name.
+- Rows are sorted by stock name, then ascending Buy Price; rows without a Buy Price use their Sell Price instead, and rows without either price sort first within their name. This sort order determines only where a newly created row is inserted; editing an existing row never moves it from its current on-screen position, even if the edit changes values the sort is based on. Changing any Filters selection re-applies the sort order and re-evaluates visibility from scratch. A row's position also resets on a full reload (e.g. app restart) or when it is removed by deletion.
 - Rows alternate white and light gray backgrounds for scanability.
 - The table includes these columns:
 

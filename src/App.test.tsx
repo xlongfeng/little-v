@@ -735,6 +735,126 @@ describe("App", () => {
     expect(screen.queryByText("9.00")).not.toBeInTheDocument();
   });
 
+  it("keeps a row's table position stable after editing it, even when the edit changes its sort order", async () => {
+    const user = userEvent.setup();
+    let ledgerState = [
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [
+          { uuid: "low", createDate: "1", modifyDate: "1", quantity: 100, buyPrice: 10, buyDate: "2026-09-01" },
+          { uuid: "high", createDate: "2", modifyDate: "2", quantity: 100, buyPrice: 20, buyDate: "2026-09-02" },
+        ],
+      },
+    ];
+    invoke.mockImplementation((command: string) => {
+      if (command === "update_transaction") {
+        ledgerState = [
+          {
+            code: "SH600000",
+            name: "Example Bank",
+            transactions: [
+              { uuid: "low", createDate: "1", modifyDate: "1", quantity: 100, buyPrice: 30, buyDate: "2026-09-01" },
+              { uuid: "high", createDate: "2", modifyDate: "2", quantity: 100, buyPrice: 20, buyDate: "2026-09-02" },
+            ],
+          },
+        ];
+        return Promise.resolve({});
+      }
+      return Promise.resolve(ledgerState);
+    });
+    render(<App />);
+
+    const namesBefore = await screen.findAllByText("Example Bank", { selector: ".stock-name" });
+    expect(namesBefore).toHaveLength(2);
+    const rowsBefore = namesBefore.map((el) => el.closest("tr") as HTMLElement);
+    expect(rowsBefore[0]).toHaveTextContent("10.00");
+    expect(rowsBefore[1]).toHaveTextContent("20.00");
+
+    await user.dblClick(rowsBefore[0]);
+    await user.clear(screen.getByLabelText("Buy price"));
+    await user.type(screen.getByLabelText("Buy price"), "30");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Edit transaction" })).not.toBeInTheDocument());
+
+    await waitFor(() => {
+      const namesAfter = screen.getAllByText("Example Bank", { selector: ".stock-name" });
+      const rowsAfter = namesAfter.map((el) => el.closest("tr") as HTMLElement);
+      expect(rowsAfter[0]).toHaveTextContent("30.00");
+      expect(rowsAfter[1]).toHaveTextContent("20.00");
+    });
+
+    // Changing a filter re-applies the sort order, restoring ascending Buy Price order.
+    await user.selectOptions(screen.getByLabelText("Period"), "1y");
+    await user.selectOptions(screen.getByLabelText("Period"), "all");
+
+    await waitFor(() => {
+      const namesReset = screen.getAllByText("Example Bank", { selector: ".stock-name" });
+      const rowsReset = namesReset.map((el) => el.closest("tr") as HTMLElement);
+      expect(rowsReset[0]).toHaveTextContent("20.00");
+      expect(rowsReset[1]).toHaveTextContent("30.00");
+    });
+  });
+
+  it("keeps an edited row visible under Alerted only until the Status filter is changed again", async () => {
+    const user = userEvent.setup();
+    let ledgerState = [
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [
+          { uuid: "buy", createDate: "1", modifyDate: "1", buyPrice: 10, buyDate: "2026-09-01" },
+        ],
+      },
+    ];
+    invoke.mockImplementation((command: string) => {
+      if (command === "update_transaction") {
+        ledgerState = [
+          {
+            code: "SH600000",
+            name: "Example Bank",
+            transactions: [
+              { uuid: "buy", createDate: "1", modifyDate: "1", buyPrice: 9, buyDate: "2026-09-01" },
+            ],
+          },
+        ];
+        return Promise.resolve({});
+      }
+      return Promise.resolve(ledgerState);
+    });
+    fetchQuotes.mockResolvedValue({
+      SH600000: { code: "SH600000", now: 9, yesterday: 9, percent: 0 },
+    });
+    render(<App />);
+
+    await screen.findAllByText("Example Bank");
+    await waitFor(() => {
+      expect(screen.getByText("10.00").closest("td")).toHaveClass("price-alert-loss");
+    });
+
+    await user.selectOptions(screen.getByLabelText("Status"), "alerted");
+    const row = screen.getByText("Example Bank", { selector: ".stock-name" }).closest("tr") as HTMLElement;
+
+    await user.dblClick(row);
+    await user.clear(screen.getByLabelText("Buy price"));
+    await user.type(screen.getByLabelText("Buy price"), "9");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Edit transaction" })).not.toBeInTheDocument());
+
+    // The row no longer satisfies the Alerted condition, but stays visible until the filter is reselected.
+    await waitFor(() => {
+      expect(screen.getByText("9.00")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Status"), "all");
+    await user.selectOptions(screen.getByLabelText("Status"), "alerted");
+
+    await waitFor(() => {
+      expect(screen.queryByText("Example Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    });
+  });
+
   it("saves configurable Price Change Alert percentages", async () => {
     const user = userEvent.setup();
     render(<App />);

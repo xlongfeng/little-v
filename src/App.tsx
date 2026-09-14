@@ -807,31 +807,124 @@ function AppContent() {
     () => priceAlertClasses(allRows, quotes, priceAlertSettings),
     [allRows, quotes, priceAlertSettings],
   );
-  const rows = useMemo(() => {
+  function matchesFilters(row: TableRow): boolean {
+    if (selectedStockName !== null && row.name !== selectedStockName) {
+      return false;
+    }
+    const isClosed = isRowClosed(row);
+    if (statusFilter === "alerted" && !alerts.get(row.key)) {
+      return false;
+    }
+    if (statusFilter === "open" && isClosed) {
+      return false;
+    }
+    if (statusFilter === "closed" && !isClosed) {
+      return false;
+    }
     const cutoff = periodCutoff(periodFilter);
-    return allRows.filter((row) => {
-      if (selectedStockName !== null && row.name !== selectedStockName) {
+    if (cutoff) {
+      const recentDate = mostRecentDate(row);
+      if (recentDate && recentDate < cutoff) {
         return false;
       }
-      const isClosed = isRowClosed(row);
-      if (statusFilter === "alerted" && !alerts.get(row.key)) {
-        return false;
-      }
-      if (statusFilter === "open" && isClosed) {
-        return false;
-      }
-      if (statusFilter === "closed" && !isClosed) {
-        return false;
-      }
-      if (cutoff) {
-        const recentDate = mostRecentDate(row);
-        if (recentDate && recentDate < cutoff) {
-          return false;
+    }
+    return true;
+  }
+
+  // Keeps each row's display position stable across edits (new rows are
+  // inserted at their sorted position; only deletions remove a row), and
+  // temporarily keeps a row visible if an edit makes it stop matching the
+  // active filters, until the filters themselves are changed. Changing any
+  // filter re-applies the full sort order and re-evaluates visibility.
+  const filterSignature = `${selectedStockName ?? ""}|${statusFilter}|${periodFilter}`;
+  const [displayState, setDisplayState] = useState<{ order: string[]; visible: Set<string> }>({
+    order: [],
+    visible: new Set(),
+  });
+  const seenKeysRef = useRef<Set<string>>(new Set());
+  const prevFilterSignatureRef = useRef<string | null>(null);
+
+  useLayoutEffect(() => {
+    const filterChanged = prevFilterSignatureRef.current !== filterSignature;
+    prevFilterSignatureRef.current = filterSignature;
+
+    const currentKeys = new Set(allRows.map((row) => row.key));
+    const rowByKey = new Map(allRows.map((row) => [row.key, row]));
+    const previouslySeen = seenKeysRef.current;
+    const sortedKeys = allRows.map((row) => row.key);
+
+    setDisplayState((prev) => {
+      const priorOrder = prev.order.filter((key) => currentKeys.has(key));
+      const priorSet = new Set(priorOrder);
+
+      let nextOrder: string[];
+      if (filterChanged || prev.order.length === 0) {
+        nextOrder = sortedKeys;
+      } else {
+        const insertAfter = new Map<string, string | null>();
+        let lastOldKey: string | null = null;
+        for (const key of sortedKeys) {
+          if (priorSet.has(key)) {
+            lastOldKey = key;
+          } else {
+            insertAfter.set(key, lastOldKey);
+          }
+        }
+        const groups = new Map<string | null, string[]>();
+        for (const key of sortedKeys) {
+          if (!priorSet.has(key)) {
+            const anchor = insertAfter.get(key) ?? null;
+            if (!groups.has(anchor)) {
+              groups.set(anchor, []);
+            }
+            groups.get(anchor)!.push(key);
+          }
+        }
+        nextOrder = [];
+        if (groups.has(null)) {
+          nextOrder.push(...groups.get(null)!);
+        }
+        for (const key of priorOrder) {
+          nextOrder.push(key);
+          if (groups.has(key)) {
+            nextOrder.push(...groups.get(key)!);
+          }
         }
       }
-      return true;
+
+      let nextVisible: Set<string>;
+      if (filterChanged || prev.order.length === 0) {
+        nextVisible = new Set(allRows.filter(matchesFilters).map((row) => row.key));
+      } else {
+        nextVisible = new Set<string>();
+        for (const key of nextOrder) {
+          if (previouslySeen.has(key)) {
+            if (prev.visible.has(key)) {
+              nextVisible.add(key);
+            }
+          } else {
+            const row = rowByKey.get(key);
+            if (row && matchesFilters(row)) {
+              nextVisible.add(key);
+            }
+          }
+        }
+      }
+
+      return { order: nextOrder, visible: nextVisible };
     });
-  }, [allRows, selectedStockName, statusFilter, periodFilter, alerts]);
+
+    seenKeysRef.current = currentKeys;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allRows, filterSignature]);
+
+  const rows = useMemo(() => {
+    const rowByKey = new Map(allRows.map((row) => [row.key, row]));
+    return displayState.order
+      .filter((key) => displayState.visible.has(key))
+      .map((key) => rowByKey.get(key))
+      .filter((row): row is TableRow => row != null);
+  }, [displayState, allRows]);
 
   useEffect(() => {
     setSelectedStockName((name) => (name !== null && !filterNames.includes(name) ? null : name));
