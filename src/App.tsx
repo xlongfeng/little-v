@@ -72,6 +72,55 @@ function formatTotalProfit(rows: TableRow[], settings: ProfitSettings): string {
   return total.toFixed(2);
 }
 
+function isValidOpenBuy(row: TableRow): boolean {
+  return row.quantity != null && row.buyPrice != null && row.buyDate != null && row.sellPrice == null;
+}
+
+function isValidOpenSell(row: TableRow): boolean {
+  return row.quantity != null && row.sellPrice != null && row.sellDate != null && row.buyPrice == null;
+}
+
+interface StockSummary {
+  name: string;
+  code: string;
+  quantity: number;
+  averageCost: number | null;
+  averageCostChangePercent: number | null;
+  marketValue: number | null;
+  gainLoss: number | null;
+}
+
+function computeStockSummary(rows: TableRow[], quote: StockQuote | undefined): StockSummary | null {
+  if (!rows.length) {
+    return null;
+  }
+  const openBuyRows = rows.filter(isValidOpenBuy);
+  const openSellRows = rows.filter(isValidOpenSell);
+  const openBuyQuantity = openBuyRows.reduce((sum, row) => sum + (row.quantity ?? 0), 0);
+  const openSellQuantity = openSellRows.reduce((sum, row) => sum + (row.quantity ?? 0), 0);
+  const quantity = openBuyQuantity - openSellQuantity;
+  const averageCost = openBuyQuantity
+    ? openBuyRows.reduce((sum, row) => sum + (row.buyPrice ?? 0) * (row.quantity ?? 0), 0) / openBuyQuantity
+    : null;
+  const averageCostChangePercent = quote && averageCost
+    ? ((quote.now - averageCost) / averageCost) * 100
+    : null;
+  const marketValue = quote ? quantity * quote.now : null;
+  const gainLoss = quote
+    ? openBuyRows.reduce((sum, row) => sum + (quote.now - (row.buyPrice ?? 0)) * (row.quantity ?? 0), 0) +
+      openSellRows.reduce((sum, row) => sum + ((row.sellPrice ?? 0) - quote.now) * (row.quantity ?? 0), 0)
+    : null;
+  return {
+    name: rows[0].name,
+    code: rows[0].code,
+    quantity,
+    averageCost,
+    averageCostChangePercent,
+    marketValue,
+    gainLoss,
+  };
+}
+
 function parseLocalDate(value: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) {
@@ -180,6 +229,20 @@ function quoteChangeClass(quote: StockQuote): string {
 function formatQuotePercent(quote: StockQuote): string {
   const percent = quote.percent * 100;
   return `${percent > 0 ? "+" : ""}${percent.toFixed(2)}%`;
+}
+
+function formatSignedPercent(percent: number): string {
+  return `${percent > 0 ? "+" : ""}${percent.toFixed(2)}%`;
+}
+
+function signedChangeClass(value: number): string {
+  if (value > 0) {
+    return "price-gain";
+  }
+  if (value < 0) {
+    return "price-loss";
+  }
+  return "";
 }
 
 function displayStockName(name: string): string {
@@ -807,6 +870,13 @@ function AppContent() {
     () => priceAlertClasses(allRows, quotes, priceAlertSettings),
     [allRows, quotes, priceAlertSettings],
   );
+  const stockSummary = useMemo(() => {
+    if (selectedStockName === null) {
+      return null;
+    }
+    const stockRows = allRows.filter((row) => row.name === selectedStockName);
+    return computeStockSummary(stockRows, quotes[stockRows[0]?.code]);
+  }, [allRows, selectedStockName, quotes]);
   function matchesFilters(row: TableRow): boolean {
     if (selectedStockName !== null && row.name !== selectedStockName) {
       return false;
@@ -1040,6 +1110,34 @@ function AppContent() {
       </section>
 
       <footer className="status-bar" aria-label={t("table.statusBar")}>
+        {stockSummary && (
+          <span className="stock-summary">
+            <span className="stock-summary-name">{displayStockName(stockSummary.name)} ({stockSummary.code})</span>
+            {quotes[stockSummary.code] && (
+              <span className={quoteChangeClass(quotes[stockSummary.code])}>
+                {quotes[stockSummary.code].now.toFixed(pricePrecision(stockSummary.code))} / {formatQuotePercent(quotes[stockSummary.code])}
+              </span>
+            )}
+            <span title={t("statusBar.averageCost.tooltip")}>
+              {t("statusBar.averageCost")}: {stockSummary.averageCost != null ? stockSummary.averageCost.toFixed(pricePrecision(stockSummary.code)) : ""}
+              {stockSummary.averageCostChangePercent != null && (
+                <span className={signedChangeClass(stockSummary.averageCostChangePercent)}>
+                  {" "}({formatSignedPercent(stockSummary.averageCostChangePercent)})
+                </span>
+              )}
+            </span>
+            <span title={t("statusBar.quantity.tooltip")}>{t("statusBar.quantity")}: {stockSummary.quantity}</span>
+            <span title={t("statusBar.marketValue.tooltip")}>
+              {t("statusBar.marketValue")}: {stockSummary.marketValue != null ? stockSummary.marketValue.toFixed(2) : ""}
+            </span>
+            <span
+              className={stockSummary.gainLoss != null ? (stockSummary.gainLoss > 0 ? "price-gain" : stockSummary.gainLoss < 0 ? "price-loss" : "") : ""}
+              title={t("statusBar.gainLoss.tooltip")}
+            >
+              {t("statusBar.gainLoss")}: {stockSummary.gainLoss != null ? stockSummary.gainLoss.toFixed(2) : ""}
+            </span>
+          </span>
+        )}
         <span title={t("totalProfit.tooltip")}>{formatTotalProfit(rows, profitSettings)}</span>
       </footer>
 

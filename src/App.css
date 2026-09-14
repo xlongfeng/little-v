@@ -13,6 +13,10 @@ button:hover { background: #e6e6e6; }
 .filter-bar { flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 24px; background: #f3f3f3; border-bottom: 1px solid #c0c0c0; }
 .filter-bar span { margin-left: auto; color: #4d4d4d; font-size: 14px; }
 .status-bar { flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 0 24px; height: 28px; color: #4d4d4d; background: #f3f3f3; border-top: 1px solid #c0c0c0; }
+.stock-summary { display: flex; align-items: center; gap: 12px; margin-right: auto; font-size: 13px; }
+.stock-summary-name { font-weight: 700; }
+.stock-summary .price-gain { color: #d13438; }
+.stock-summary .price-loss { color: #107c10; }
 .inline-filter { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; color: #4d4d4d; white-space: nowrap; }
 .inline-filter select { width: auto; font-weight: 400; color: #212121; }
 input, select, textarea { width: 100%; border: 1px solid #b3b3b3; border-radius: 2px; padding: 7px 8px; background: #fff; }

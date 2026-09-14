@@ -176,6 +176,41 @@ describe("App", () => {
     expect(screen.queryByText("Second Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
   });
 
+  it("shows a stock summary in the status bar for the selected Names filter, counting only valid open transactions", async () => {
+    const user = userEvent.setup();
+    invoke.mockResolvedValue([
+      {
+        code: "SH600000",
+        name: "Example Bank",
+        transactions: [
+          { uuid: "open-buy-1", createDate: "1", modifyDate: "1", quantity: 100, buyPrice: 10, buyDate: "2026-09-01" },
+          { uuid: "open-buy-2", createDate: "2", modifyDate: "2", quantity: 200, buyPrice: 12, buyDate: "2026-09-02" },
+          { uuid: "undated-buy", createDate: "3", modifyDate: "3", quantity: 50, buyPrice: 9 },
+          { uuid: "open-sell", createDate: "4", modifyDate: "4", quantity: 30, sellPrice: 15, sellDate: "2026-09-03" },
+          { uuid: "closed", createDate: "5", modifyDate: "5", quantity: 100, buyPrice: 8, buyDate: "2026-09-01", sellPrice: 14, sellDate: "2026-09-02" },
+        ],
+      },
+    ]);
+    fetchQuotes.mockResolvedValue({
+      SH600000: { code: "SH600000", now: 11, yesterday: 10, percent: 0.1 },
+    });
+    render(<App />);
+    expect((await screen.findAllByText("Example Bank", { selector: ".stock-name" })).length).toBeGreaterThan(0);
+
+    await user.selectOptions(screen.getByLabelText("Names"), "Example Bank");
+
+    const statusBar = document.querySelector(".status-bar") as HTMLElement;
+    expect(within(statusBar).getByText("11.00 / +10.00%")).toHaveClass("price-gain");
+    // Avg cost: (100*10 + 200*12) / 300 = 11.33; change vs current price 11: (11-11.33)/11.33 = -2.94%.
+    expect(within(statusBar).getByText("Avg cost: 11.33")).toBeInTheDocument();
+    expect(within(statusBar).getByText("(-2.94%)")).toHaveClass("price-loss");
+    // Net quantity: 300 open-buy total minus 30 open-sell total = 270.
+    expect(within(statusBar).getByText("Qty: 270")).toBeInTheDocument();
+    expect(within(statusBar).getByText("Value: 2970.00")).toBeInTheDocument();
+    // P/L: buys (11-10)*100 + (11-12)*200 = -100, plus sell (15-11)*30 = 120 => 20.00
+    expect(within(statusBar).getByText("P/L: 20.00")).toBeInTheDocument();
+  });
+
   it("shows a comment indicator next to the stock name with the note text as a tooltip", async () => {
     invoke.mockResolvedValue([
       {

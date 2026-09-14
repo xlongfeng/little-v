@@ -102,6 +102,8 @@ At the far right of the Filters bar, the count of currently visible rows (i.e. a
 
 A status bar at the bottom of the window shows the sum of Profit for currently visible rows (see §6.3 for the formula), right-aligned. Hovering the profit value shows a **Total profit** tooltip.
 
+When a single stock is selected in the Names filter, the status bar also shows, at its left edge, a summary for that stock built only from its **valid open transactions** (an open Buy needs quantity, Buy Price, and Buy Date; an open Sell needs quantity, Sell Price, and Sell Date; a transaction with both a buy and sell side, or missing its price/date, does not count): the stock's display name and code, its live current price and percentage change (when a quote is available), the average cost per share across open buys (**Avg cost**, `Σ (buy price × quantity) / Σ quantity` over open buys only), shown with the current gain/loss percentage against that average cost in parentheses (`(current price − average cost) / average cost`, colored red for a gain and green for a loss), the net open quantity (**Qty**, total open Buy quantity minus total open Sell quantity — negative when net short), the total current market value of that net quantity at the live price (**Value**, `quantity × current price`), and the total current gain or loss across the open position (**P/L**: `Σ (current price − buy price) × quantity` for open buys, plus `Σ (sell price − current price) × quantity` for open sells; colored red for a gain and green for a loss). This summary always reflects the selected stock's full position regardless of the Status/Period filters.
+
 ### 6.1.1 Language / localization
 
 - The app supports **English** and **Simplified Chinese** (`zh_cn`).
