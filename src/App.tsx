@@ -366,18 +366,21 @@ function CurrentQuoteRow({
   isSellPrice,
   quantity,
   precision,
+  name,
 }: {
   quote: StockQuote;
   referencePrice: number;
   isSellPrice: boolean;
   quantity: number | null | undefined;
   precision: number;
+  name?: string;
 }) {
   return (
     <div className="current-quote">
       <span className={`current-quote-market ${quoteChangeClass(quote)}`}>
         {quote.now.toFixed(precision)} / {formatQuotePercent(quote)}
       </span>
+      {name && <span className="current-quote-name">{displayStockName(name)}</span>}
       <span className={`current-quote-reference ${referenceChangeClass(quote, referencePrice, isSellPrice)}`}>
         <span className="current-quote-reference-profit">
           {formatReferenceProfit(quote, referencePrice, isSellPrice, quantity)}
@@ -393,12 +396,14 @@ function CurrentQuoteRow({
 function PriceCell({
   price,
   code,
+  name,
   quantity,
   isSellPrice,
   alertClass,
 }: {
   price: number | null | undefined;
   code: string;
+  name: string;
   quantity: number | null | undefined;
   isSellPrice: boolean;
   alertClass?: string;
@@ -456,6 +461,7 @@ function PriceCell({
               isSellPrice={isSellPrice}
               quantity={quantity}
               precision={precision}
+              name={name}
             />
           )}
           <table>
@@ -1079,11 +1085,11 @@ function AppContent() {
               <tr key={row.key} className={isRowClosed(row) ? "closed-row" : undefined} onDoubleClick={() => setEditingRow(row)}>
                 <NameCell row={row} />
                 <td>{row.quantity ?? ""}</td>
-                <PriceCell price={row.buyPrice} code={row.code} quantity={row.quantity} isSellPrice={false} alertClass={alerts.get(row.key)?.buy} />
+                <PriceCell price={row.buyPrice} code={row.code} name={row.name} quantity={row.quantity} isSellPrice={false} alertClass={alerts.get(row.key)?.buy} />
                 <td className={`table-date${row.buyPrice != null && !row.buyDate ? " missing-date" : ""}`} title={row.buyDate}>
                   {formatTableDate(row.buyDate, t)}
                 </td>
-                <PriceCell price={row.sellPrice} code={row.code} quantity={row.quantity} isSellPrice alertClass={alerts.get(row.key)?.sell} />
+                <PriceCell price={row.sellPrice} code={row.code} name={row.name} quantity={row.quantity} isSellPrice alertClass={alerts.get(row.key)?.sell} />
                 <td className={`table-date${row.sellPrice != null && !row.sellDate ? " missing-date" : ""}`} title={row.sellDate}>
                   {formatTableDate(row.sellDate, t)}
                 </td>

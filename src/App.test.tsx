@@ -707,6 +707,7 @@ describe("App", () => {
 
     expect(popup.querySelector(".current-quote-market")).toHaveTextContent("10.42 / +15.78%");
     expect(popup.querySelector(".current-quote-market")).toHaveClass("price-gain");
+    expect(popup.querySelector(".current-quote-name")).toHaveTextContent("Example Bank");
     expect(popup.querySelector(".current-quote-reference-profit")).toHaveTextContent("+42.00");
     expect(popup.querySelector(".current-quote-reference-change")).toHaveTextContent("+0.42 / +4.20%");
     expect(popup.querySelector(".current-quote-reference")).toHaveClass("price-gain");
