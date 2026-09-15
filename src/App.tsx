@@ -476,14 +476,14 @@ function PriceCell({
           <table>
             <thead>
               <tr>
-                {UP_STEPS.map((pct) => (
+                {[...UP_STEPS].reverse().map((pct) => (
                   <th key={pct} className={pct === nearestStep ? "nearest-price price-gain" : ""}>+{pct}%</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               <tr>
-                {UP_STEPS.map((pct) => (
+                {[...UP_STEPS].reverse().map((pct) => (
                   <td key={pct} className={pct === nearestStep ? "nearest-price price-gain" : ""}>{(price * (1 + pct / 100)).toFixed(precision)}</td>
                 ))}
               </tr>
