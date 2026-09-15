@@ -39,7 +39,7 @@ table { width: 100%; border-collapse: collapse; text-align: left; font-size: 15p
 .col-sell-date { width: 12%; }
 .col-profit { width: 10%; }
 .col-actions { width: 8%; }
-th { position: sticky; top: 0; padding: 2px 16px; color: #808080; background: #f3f3f3; font-size: 15px; font-weight: 700; letter-spacing: .01em; border-bottom: 1px solid #c0c0c0; }
+th { position: sticky; top: 0; z-index: 1; padding: 2px 16px; color: #808080; background: #f3f3f3; font-size: 15px; font-weight: 700; letter-spacing: .01em; border-bottom: 1px solid #c0c0c0; }
 td { padding: 2px 16px; border-bottom: 1px solid #d0d0d0; }
 tbody tr:nth-child(even) { background: #f7f7f7; }
 tbody tr:hover { background: #e8f0fb; }
