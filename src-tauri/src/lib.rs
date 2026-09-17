@@ -64,6 +64,19 @@ pub struct UpdateTransactionRequest {
     pub note: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeTransactionsRequest {
+    pub code: String,
+    pub uuids: Vec<String>,
+    pub quantity: Option<i64>,
+    pub buy_price: Option<f64>,
+    pub buy_date: Option<String>,
+    pub sell_price: Option<f64>,
+    pub sell_date: Option<String>,
+    pub note: Option<String>,
+}
+
 struct StorageInner {
     root: PathBuf,
     _watcher: RecommendedWatcher,
@@ -378,6 +391,63 @@ fn update_transaction_in(
     Ok(updated)
 }
 
+fn merge_transactions_in(
+    storage_root: &Path,
+    request: MergeTransactionsRequest,
+) -> Result<Transaction, String> {
+    if request.uuids.len() < 2 {
+        return Err("Select at least two transactions to merge.".into());
+    }
+    validate_fields(
+        request.quantity,
+        request.buy_price,
+        request.buy_date.as_ref(),
+        request.sell_price,
+        request.sell_date.as_ref(),
+    )?;
+
+    let code = request.code.trim().to_uppercase();
+    let path = stock_path(storage_root, &code)?;
+    if !path.exists() {
+        return Err(format!("No ledger found for stock code {code}."));
+    }
+
+    let content = fs::read_to_string(&path)
+        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
+    let mut ledger: StockLedger = serde_json::from_str(&content)
+        .map_err(|error| format!("Could not parse {}: {error}", path.display()))?;
+
+    let original_len = ledger.transactions.len();
+    ledger
+        .transactions
+        .retain(|transaction| !request.uuids.contains(&transaction.uuid));
+    if original_len - ledger.transactions.len() != request.uuids.len() {
+        return Err("One or more selected transactions could not be found.".into());
+    }
+
+    let now = timestamp();
+    let merged = Transaction {
+        uuid: Uuid::new_v4().to_string(),
+        create_date: now.clone(),
+        modify_date: now,
+        quantity: request.quantity,
+        buy_price: round_price(request.buy_price, &code),
+        buy_date: request.buy_date,
+        sell_price: round_price(request.sell_price, &code),
+        sell_date: request.sell_date,
+        note: request
+            .note
+            .as_deref()
+            .map(str::trim)
+            .filter(|note| !note.is_empty())
+            .map(str::to_string),
+    };
+    ledger.transactions.push(merged.clone());
+
+    write_json_file(&path, &ledger)?;
+    Ok(merged)
+}
+
 fn is_ledger_event(event: &Event) -> bool {
     matches!(
         event.kind,
@@ -555,6 +625,15 @@ fn update_transaction(
 ) -> Result<Transaction, String> {
     let inner = state.lock()?;
     update_transaction_in(&inner.root, request)
+}
+
+#[tauri::command]
+fn merge_transactions(
+    state: State<'_, StorageState>,
+    request: MergeTransactionsRequest,
+) -> Result<Transaction, String> {
+    let inner = state.lock()?;
+    merge_transactions_in(&inner.root, request)
 }
 
 #[cfg(test)]
@@ -975,6 +1054,99 @@ mod tests {
         let result = update_transaction_in(directory.path(), base_update("MISSING", "some-uuid"));
         assert!(result.is_err());
     }
+
+    #[test]
+    fn merges_two_open_buys_into_one_weighted_average_transaction() {
+        let directory = tempdir().unwrap();
+        let first = save_transaction_to(
+            directory.path(),
+            CreateTransactionRequest {
+                quantity: Some(100),
+                buy_price: Some(10.0),
+                buy_date: Some("2026-09-01".into()),
+                note: Some("first".into()),
+                ..base_request()
+            },
+        )
+        .unwrap();
+        let second = save_transaction_to(
+            directory.path(),
+            CreateTransactionRequest {
+                quantity: Some(200),
+                buy_price: Some(13.0),
+                buy_date: Some("2026-09-05".into()),
+                note: Some("second".into()),
+                ..base_request()
+            },
+        )
+        .unwrap();
+
+        let merged = merge_transactions_in(
+            directory.path(),
+            MergeTransactionsRequest {
+                code: "EXAMPLE".into(),
+                uuids: vec![first.uuid.clone(), second.uuid.clone()],
+                quantity: Some(300),
+                buy_price: Some(12.0),
+                buy_date: Some("2026-09-05".into()),
+                sell_price: None,
+                sell_date: None,
+                note: Some("first\nsecond".into()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(merged.quantity, Some(300));
+        assert_eq!(merged.buy_price, Some(12.0));
+        assert_eq!(merged.buy_date, Some("2026-09-05".into()));
+        assert_eq!(merged.note, Some("first\nsecond".into()));
+
+        let ledger = load_ledgers_from(directory.path()).unwrap().pop().unwrap();
+        assert_eq!(ledger.transactions.len(), 1);
+        assert_eq!(ledger.transactions[0].uuid, merged.uuid);
+    }
+
+    #[test]
+    fn rejects_merging_fewer_than_two_transactions() {
+        let directory = tempdir().unwrap();
+        let created = save_transaction_to(directory.path(), base_request()).unwrap();
+
+        let result = merge_transactions_in(
+            directory.path(),
+            MergeTransactionsRequest {
+                code: "EXAMPLE".into(),
+                uuids: vec![created.uuid],
+                quantity: Some(100),
+                buy_price: Some(10.0),
+                buy_date: None,
+                sell_price: None,
+                sell_date: None,
+                note: None,
+            },
+        );
+        assert!(result.unwrap_err().contains("at least two"));
+    }
+
+    #[test]
+    fn rejects_merging_a_transaction_that_does_not_exist() {
+        let directory = tempdir().unwrap();
+        let created = save_transaction_to(directory.path(), base_request()).unwrap();
+
+        let result = merge_transactions_in(
+            directory.path(),
+            MergeTransactionsRequest {
+                code: "EXAMPLE".into(),
+                uuids: vec![created.uuid, "missing-uuid".into()],
+                quantity: Some(100),
+                buy_price: Some(10.0),
+                buy_date: None,
+                sell_price: None,
+                sell_date: None,
+                note: None,
+            },
+        );
+        assert!(result.unwrap_err().contains("not be found"));
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1010,7 +1182,8 @@ pub fn run() {
             load_stock_ledgers,
             create_transaction,
             delete_transaction,
-            update_transaction
+            update_transaction,
+            merge_transactions
         ])
         .run(tauri::generate_context!())
         .expect("error while running Tauri application");

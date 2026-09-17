@@ -706,6 +706,7 @@ function AppContent() {
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<TableRow | null>(null);
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dataDirectory, setDataDirectory] = useState("");
@@ -1027,6 +1028,7 @@ function AppContent() {
         <div className="brand">Little V</div>
         <nav aria-label={t("table.applicationMenu")}>
           <button type="button" onClick={() => setDialogOpen(true)}>{t("menu.create")}</button>
+          <button type="button" onClick={() => setMergeOpen(true)}>{t("menu.merge")}</button>
           <button type="button" onClick={openSettings}>{t("menu.settings")}</button>
           <button type="button" onClick={() => setAboutOpen(true)}>{t("menu.about")}</button>
         </nav>
@@ -1177,6 +1179,16 @@ function AppContent() {
           onClose={() => setEditingRow(null)}
           onCreated={() => {
             setEditingRow(null);
+            void loadLedgers();
+          }}
+        />
+      )}
+      {mergeOpen && (
+        <MergeDialog
+          ledgers={ledgers}
+          onClose={() => setMergeOpen(false)}
+          onMerged={() => {
+            setMergeOpen(false);
             void loadLedgers();
           }}
         />
@@ -1591,6 +1603,273 @@ function TransactionDialog({
         {error && <p className="field-error" role="alert">{error}</p>}
         <div className="dialog-actions"><button type="button" onClick={onClose}>{t("dialog.cancel")}</button><button className="primary" type="submit" disabled={saving}>{saving ? t("dialog.saving") : t("dialog.save")}</button></div>
       </form>
+    </div>
+  );
+}
+
+function MergeDialog({
+  ledgers,
+  onClose,
+  onMerged,
+}: {
+  ledgers: StockLedger[];
+  onClose: () => void;
+  onMerged: () => void;
+}) {
+  const { t } = useLanguage();
+  const { quotes } = usePriceFeed();
+  const [stockQuery, setStockQuery] = useState("");
+  const [selectedStock, setSelectedStock] = useState<StockOption | null>(null);
+  const [stockListOpen, setStockListOpen] = useState(false);
+  const stockComboboxRef = useRef<HTMLDivElement>(null);
+  const [selectedUuids, setSelectedUuids] = useState<Set<string>>(new Set());
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const selectedQuote = selectedStock ? quotes[selectedStock.code] : undefined;
+
+  const localStocks = useMemo(() => ledgers.map(({ code, name }) => ({ code, name })), [ledgers]);
+  const filteredStocks = useMemo(() => {
+    const selectedLabel = selectedStock ? `${selectedStock.name} (${displayStockCode(selectedStock.code)})` : null;
+    const query = stockQuery === selectedLabel ? "" : stockQuery.trim().toLowerCase();
+    if (!query) {
+      return localStocks;
+    }
+    return localStocks.filter(
+      (stock) => stock.name.toLowerCase().includes(query) || stock.code.toLowerCase().includes(query),
+    );
+  }, [localStocks, stockQuery, selectedStock]);
+
+  useEffect(() => {
+    if (!stockListOpen) {
+      return;
+    }
+    const closeWhenClickedOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !stockComboboxRef.current?.contains(event.target)) {
+        setStockListOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeWhenClickedOutside);
+    return () => document.removeEventListener("pointerdown", closeWhenClickedOutside);
+  }, [stockListOpen]);
+
+  function selectStock(stock: StockOption) {
+    setSelectedStock(stock);
+    setStockQuery(`${stock.name} (${displayStockCode(stock.code)})`);
+    setStockListOpen(false);
+    setSelectedUuids(new Set());
+    setError("");
+  }
+
+  const openRows = useMemo(() => {
+    if (!selectedStock) {
+      return [];
+    }
+    const ledger = ledgers.find((candidate) => candidate.code === selectedStock.code);
+    if (!ledger) {
+      return [];
+    }
+    return toTableRows([ledger]).filter((row) => isValidOpenBuy(row) || isValidOpenSell(row));
+  }, [ledgers, selectedStock]);
+
+  function toggleRow(key: string) {
+    setSelectedUuids((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+    setError("");
+  }
+
+  const checkedRows = openRows.filter((row) => selectedUuids.has(row.key));
+  const hasOpenBuy = checkedRows.some(isValidOpenBuy);
+  const hasOpenSell = checkedRows.some(isValidOpenSell);
+  const mixedSides = hasOpenBuy && hasOpenSell;
+  const canMerge = checkedRows.length >= 2 && !mixedSides;
+
+  const mergeDetails = useMemo(() => {
+    if (!canMerge) {
+      return null;
+    }
+    const isSell = hasOpenSell;
+    const quantity = checkedRows.reduce((sum, row) => sum + (row.quantity ?? 0), 0);
+    const weightedPrice =
+      checkedRows.reduce(
+        (sum, row) => sum + (isSell ? row.sellPrice ?? 0 : row.buyPrice ?? 0) * (row.quantity ?? 0),
+        0,
+      ) / quantity;
+    const latestDate = checkedRows.reduce<string | undefined>((latest, row) => {
+      const date = isSell ? row.sellDate : row.buyDate;
+      if (!date) {
+        return latest;
+      }
+      return !latest || date > latest ? date : latest;
+    }, undefined);
+    const note = checkedRows
+      .map((row) => row.note?.trim())
+      .filter((noteValue): noteValue is string => !!noteValue)
+      .join("\n");
+    return { isSell, quantity, price: weightedPrice, date: latestDate, note, uuids: checkedRows.map((row) => row.key) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canMerge, hasOpenSell, checkedRows.map((row) => row.key).join(",")]);
+
+  async function submitMerge() {
+    if (!mergeDetails || !selectedStock) {
+      return;
+    }
+    const { isSell, quantity, price, date, note, uuids } = mergeDetails;
+    setSaving(true);
+    setError("");
+    try {
+      await invoke("merge_transactions", {
+        request: {
+          code: selectedStock.code,
+          uuids,
+          quantity,
+          buyPrice: isSell ? null : price,
+          buyDate: isSell ? null : date ?? null,
+          sellPrice: isSell ? price : null,
+          sellDate: isSell ? date ?? null : null,
+          note: note || null,
+        },
+      });
+      onMerged();
+    } catch (mergeError) {
+      setError(String(mergeError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <section className="dialog merge-dialog" role="dialog" aria-label={t("merge.title")}>
+        <div className="dialog-heading">
+          <h2>{t("merge.title")}</h2>
+          <button type="button" className="icon-button" onClick={onClose} aria-label={t("dialog.close")}>×</button>
+        </div>
+        <label>{t("dialog.stock")}
+          <div className={`stock-combobox${selectedQuote ? " has-current-quote" : ""}`} ref={stockComboboxRef}>
+            <input
+              value={stockQuery}
+              onChange={(event) => {
+                setStockQuery(event.target.value);
+                setSelectedStock(null);
+                setSelectedUuids(new Set());
+              }}
+              onFocus={() => setStockListOpen(true)}
+              placeholder={t("dialog.stockPlaceholder")}
+              role="combobox"
+              aria-label={t("dialog.stock")}
+              aria-expanded={stockListOpen}
+              aria-controls="merge-stock-options"
+              aria-autocomplete="list"
+            />
+            {selectedQuote && (
+              <output className={`stock-current-quote ${quoteChangeClass(selectedQuote)}`}>
+                {selectedQuote.now.toFixed(pricePrecision(selectedStock!.code))} / {formatQuotePercent(selectedQuote)}
+              </output>
+            )}
+            <button
+              type="button"
+              className="combobox-toggle"
+              aria-label={t("dialog.showExistingStocks")}
+              onClick={() => setStockListOpen(true)}
+            >
+              ▾
+            </button>
+            {stockListOpen && (
+              <ul id="merge-stock-options" className="stock-options" role="listbox">
+                {filteredStocks.map((stock) => (
+                  <li key={stock.code} role="option" aria-selected={selectedStock?.code === stock.code}>
+                    <button type="button" onClick={() => selectStock(stock)}>
+                      {stock.name} <span>({displayStockCode(stock.code)})</span>
+                    </button>
+                  </li>
+                ))}
+                {!filteredStocks.length && <li className="no-options">{t("dialog.noMatchingStocks")}</li>}
+              </ul>
+            )}
+          </div>
+        </label>
+        <div className="merge-table-wrapper">
+          <table className="merge-table">
+            <thead>
+              <tr>
+                <th className="col-merge-select" />
+                <th>{t("merge.side")}</th>
+                <th>{t("table.quantity")}</th>
+                <th>{t("merge.price")}</th>
+                <th>{t("merge.date")}</th>
+                <th>{t("table.noteLabel")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {openRows.map((row) => {
+                const isSell = isValidOpenSell(row);
+                const rowPrice = isSell ? row.sellPrice : row.buyPrice;
+                const disabled = isSell ? hasOpenBuy : hasOpenSell;
+                return (
+                  <tr key={row.key}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedUuids.has(row.key)}
+                        onChange={() => toggleRow(row.key)}
+                        aria-label={t("merge.selectRow")}
+                        disabled={disabled}
+                      />
+                    </td>
+                    <td>{isSell ? t("merge.sell") : t("merge.buy")}</td>
+                    <td>{row.quantity}</td>
+                    <td>{rowPrice != null ? rowPrice.toFixed(pricePrecision(row.code)) : ""}</td>
+                    <td>{isSell ? row.sellDate : row.buyDate}</td>
+                    <td>{row.note}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {selectedStock && !openRows.length && <p className="merge-empty">{t("merge.noOpenTransactions")}</p>}
+        {error && <p className="field-error" role="alert">{error}</p>}
+        <div className="merge-detail">
+          <label>{t("dialog.quantity")}
+            <input type="number" readOnly value={mergeDetails?.quantity ?? ""} />
+          </label>
+          <div className="two-columns">
+            <label>{t("merge.price")}
+              <input
+                type="number"
+                readOnly
+                value={mergeDetails && selectedStock
+                  ? mergeDetails.price.toFixed(pricePrecision(selectedStock.code))
+                  : ""}
+              />
+            </label>
+            <label>{t("merge.date")}
+              <input
+                type="date"
+                readOnly
+                className={mergeDetails?.date ? undefined : "date-empty"}
+                value={mergeDetails?.date ?? ""}
+              />
+            </label>
+          </div>
+          <label>{t("dialog.note")}
+            <textarea rows={3} readOnly value={mergeDetails?.note ?? ""} />
+          </label>
+        </div>
+        <div className="dialog-actions">
+          <button type="button" onClick={onClose}>{t("dialog.cancel")}</button>
+          <button type="button" className="primary" disabled={!canMerge || saving} onClick={() => void submitMerge()}>
+            {saving ? t("dialog.saving") : t("merge.mergeAction")}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

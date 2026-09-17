@@ -1759,3 +1759,243 @@ describe("App", () => {
     expect(quantityInput.value).not.toContain(".");
   });
 });
+
+describe("Merge transactions", () => {
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+  });
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    invoke.mockReset();
+    listen.mockReset();
+    open.mockReset();
+    searchStocks.mockReset();
+    fetchQuotes.mockReset();
+    fetchQuotes.mockResolvedValue({});
+    listen.mockResolvedValue(vi.fn());
+    open.mockResolvedValue(null);
+    const ledgers = [
+      {
+        code: "SH600002",
+        name: "Multi Stock",
+        transactions: [
+          {
+            uuid: "buy-a",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            buyPrice: 10,
+            buyDate: "2026-09-01",
+            note: "First lot",
+          },
+          {
+            uuid: "buy-b",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 200,
+            buyPrice: 12,
+            buyDate: "2026-09-03",
+            note: "Second lot",
+          },
+          {
+            uuid: "sell-a",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            sellPrice: 15,
+            sellDate: "2026-09-02",
+          },
+          {
+            uuid: "closed",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            buyPrice: 8,
+            buyDate: "2026-08-01",
+            sellPrice: 9,
+            sellDate: "2026-08-05",
+          },
+        ],
+      },
+      {
+        code: "SH600003",
+        name: "Empty Stock",
+        transactions: [
+          {
+            uuid: "closed-only",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            buyPrice: 8,
+            buyDate: "2026-08-01",
+            sellPrice: 9,
+            sellDate: "2026-08-05",
+          },
+        ],
+      },
+    ];
+    invoke.mockImplementation((command, args) => {
+      if (command === "load_stock_ledgers") {
+        return Promise.resolve(ledgers);
+      }
+      if (command === "get_data_directory" || command === "get_default_data_directory") {
+        return Promise.resolve("C:\\Users\\Example\\Documents\\Little V");
+      }
+      if (command === "set_data_directory") {
+        return Promise.resolve((args as { directory: string }).directory);
+      }
+      return Promise.resolve(undefined);
+    });
+  });
+
+  async function selectMergeStock(user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement, name: string) {
+    const stockInput = within(dialog).getByRole("combobox", { name: "Stock" });
+    await user.type(stockInput, name);
+    await user.click(within(dialog).getByRole("button", { name: new RegExp(name) }));
+  }
+
+  it("merges two selected open buy transactions into one weighted-average transaction", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByText("Multi Stock", { selector: ".stock-name" });
+
+    await user.click(screen.getByRole("button", { name: "Merge" }));
+    const dialog = screen.getByRole("dialog", { name: "Merge transactions" });
+    await selectMergeStock(user, dialog, "Multi Stock");
+
+    const rows = within(dialog).getAllByRole("row").filter((row) => within(row).queryByRole("checkbox"));
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      if (within(row).queryByText("10.00") || within(row).queryByText("12.00")) {
+        await user.click(within(row).getByRole("checkbox"));
+      }
+    }
+
+    const detail = dialog.querySelector(".merge-detail") as HTMLElement;
+    expect(within(detail).getByLabelText("Quantity")).toHaveValue(300);
+    expect(within(detail).getByLabelText("Price")).toHaveValue(Number((34 / 3).toFixed(2)));
+    expect(within(detail).getByLabelText("Date")).toHaveValue("2026-09-03");
+    expect(within(detail).getByLabelText("Note")).toHaveValue("First lot\nSecond lot");
+    for (const field of within(detail).getAllByRole("spinbutton")) {
+      expect(field).toHaveAttribute("readonly");
+    }
+    expect(within(detail).getByLabelText("Date")).toHaveAttribute("readonly");
+    expect(within(detail).getByLabelText("Note")).toHaveAttribute("readonly");
+    expect(within(detail).queryByText("Side")).not.toBeInTheDocument();
+
+    const mergeButton = within(dialog).getByRole("button", { name: "Merge" });
+    expect(mergeButton).toBeEnabled();
+    await user.click(mergeButton);
+
+    expect(invoke).toHaveBeenCalledWith("merge_transactions", {
+      request: {
+        code: "SH600002",
+        uuids: expect.arrayContaining(["buy-a", "buy-b"]),
+        quantity: 300,
+        buyPrice: 34 / 3,
+        buyDate: "2026-09-03",
+        sellPrice: null,
+        sellDate: null,
+        note: "First lot\nSecond lot",
+      },
+    });
+  });
+
+  it("disables the checkboxes of the opposite side once a transaction is selected", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByText("Multi Stock", { selector: ".stock-name" });
+
+    await user.click(screen.getByRole("button", { name: "Merge" }));
+    const dialog = screen.getByRole("dialog", { name: "Merge transactions" });
+    await selectMergeStock(user, dialog, "Multi Stock");
+
+    const rows = within(dialog).getAllByRole("row").filter((row) => within(row).queryByRole("checkbox"));
+    const buyRow = rows.find((row) => within(row).queryByText("10.00"))!;
+    const sellRow = rows.find((row) => within(row).queryByText("15.00"))!;
+    await user.click(within(buyRow).getByRole("checkbox"));
+
+    expect(within(sellRow).getByRole("checkbox")).toBeDisabled();
+    expect(invoke).not.toHaveBeenCalledWith("merge_transactions", expect.anything());
+  });
+
+  it("disables the Merge button until at least two rows are selected", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByText("Multi Stock", { selector: ".stock-name" });
+
+    await user.click(screen.getByRole("button", { name: "Merge" }));
+    const dialog = screen.getByRole("dialog", { name: "Merge transactions" });
+    await selectMergeStock(user, dialog, "Multi Stock");
+
+    expect(within(dialog).getByRole("button", { name: "Merge" })).toBeDisabled();
+
+    const rows = within(dialog).getAllByRole("row").filter((row) => within(row).queryByRole("checkbox"));
+    const buyRow = rows.find((row) => within(row).queryByText("10.00"))!;
+    await user.click(within(buyRow).getByRole("checkbox"));
+
+    expect(within(dialog).getByRole("button", { name: "Merge" })).toBeDisabled();
+  });
+
+  it("shows an empty state when the selected stock has no valid open transactions", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByText("Multi Stock", { selector: ".stock-name" });
+
+    await user.click(screen.getByRole("button", { name: "Merge" }));
+    const dialog = screen.getByRole("dialog", { name: "Merge transactions" });
+    await selectMergeStock(user, dialog, "Empty Stock");
+
+    expect(
+      within(dialog).getByText("This stock has no valid open transactions to merge."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the transactions table before any stock is selected", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByText("Multi Stock", { selector: ".stock-name" });
+
+    await user.click(screen.getByRole("button", { name: "Merge" }));
+    const dialog = screen.getByRole("dialog", { name: "Merge transactions" });
+
+    expect(within(dialog).getByRole("table")).toBeInTheDocument();
+    expect(within(dialog).queryAllByRole("checkbox")).toHaveLength(0);
+    expect(dialog.querySelector(".merge-detail")).toBeInTheDocument();
+  });
+
+  it("shows every stock again when reopening the list after a stock is already selected", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByText("Multi Stock", { selector: ".stock-name" });
+
+    await user.click(screen.getByRole("button", { name: "Merge" }));
+    const dialog = screen.getByRole("dialog", { name: "Merge transactions" });
+    await selectMergeStock(user, dialog, "Multi Stock");
+
+    await user.click(within(dialog).getByRole("button", { name: "Show existing stocks" }));
+
+    expect(within(dialog).getByRole("button", { name: /Empty Stock/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /Multi Stock/ })).toBeInTheDocument();
+  });
+
+  it("shows the selected stock's live quote and change after the combobox", async () => {
+    const user = userEvent.setup();
+    fetchQuotes.mockResolvedValue({
+      SH600002: { code: "SH600002", now: 13.5, yesterday: 12, percent: 0.125 },
+    });
+    render(<App />);
+    await screen.findAllByText("Multi Stock", { selector: ".stock-name" });
+    await waitFor(() => expect(fetchQuotes).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: "Merge" }));
+    const dialog = screen.getByRole("dialog", { name: "Merge transactions" });
+    await selectMergeStock(user, dialog, "Multi Stock");
+
+    const quote = await within(dialog).findByText("13.50 / +12.50%");
+    expect(quote).toHaveClass("stock-current-quote");
+    expect(quote.closest(".stock-combobox")).not.toBeNull();
+  });
+});

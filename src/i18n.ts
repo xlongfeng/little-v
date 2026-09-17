@@ -8,6 +8,7 @@ type Dictionary = Record<string, string>;
 
 const en: Dictionary = {
   "menu.create": "Create",
+  "menu.merge": "Merge",
   "menu.settings": "Settings",
   "menu.about": "About",
   "totalProfit": "{value}",
@@ -53,6 +54,7 @@ const en: Dictionary = {
   "table.profit": "Profit",
   "table.actions": "Actions",
   "table.note": "Note: {note}",
+  "table.noteLabel": "Note",
   "table.deleteTransaction": "Delete transaction",
   "table.noRecords": "No trading records yet. Use Create to add one.",
   "table.recordControls": "Record controls",
@@ -112,10 +114,20 @@ const en: Dictionary = {
   "settings.alertGain": "Gain (%)",
   "settings.alertLoss": "Loss (%)",
   "settings.default": "Default",
+  "merge.title": "Merge transactions",
+  "merge.side": "Side",
+  "merge.price": "Price",
+  "merge.date": "Date",
+  "merge.buy": "Buy",
+  "merge.sell": "Sell",
+  "merge.selectRow": "Select transaction",
+  "merge.noOpenTransactions": "This stock has no valid open transactions to merge.",
+  "merge.mergeAction": "Merge",
 };
 
 const zh_cn: Dictionary = {
   "menu.create": "新建",
+  "menu.merge": "合并",
   "menu.settings": "设置",
   "menu.about": "关于",
   "totalProfit": "{value}",
@@ -161,6 +173,7 @@ const zh_cn: Dictionary = {
   "table.profit": "盈亏",
   "table.actions": "操作",
   "table.note": "备注：{note}",
+  "table.noteLabel": "备注",
   "table.deleteTransaction": "删除交易",
   "table.noRecords": "暂无交易记录，点击“新建”添加一条。",
   "table.recordControls": "记录筛选控件",
@@ -220,6 +233,15 @@ const zh_cn: Dictionary = {
   "settings.alertGain": "涨幅（%）",
   "settings.alertLoss": "跌幅（%）",
   "settings.default": "默认",
+  "merge.title": "合并交易",
+  "merge.side": "方向",
+  "merge.price": "价格",
+  "merge.date": "日期",
+  "merge.buy": "买入",
+  "merge.sell": "卖出",
+  "merge.selectRow": "选择交易",
+  "merge.noOpenTransactions": "该股票没有可合并的有效持仓交易。",
+  "merge.mergeAction": "合并",
 };
 
 const translations: Record<Language, Dictionary> = { en, zh_cn };

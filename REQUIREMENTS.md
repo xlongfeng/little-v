@@ -95,6 +95,7 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | Menu item | Behavior |
 | --- | --- |
 | **Create** | Opens the transaction creation dialog |
+| **Merge** | Opens the Merge transactions dialog (see §7) |
 | **Settings** | Shows **General** (Language and data folder), **Stock Quotes** (refresh interval), **Stock Fee** (stamp duty rate, trade fee rate, minimum trade fee), and **Price Change Alert** (Gain and Loss thresholds) groups. All changes are staged in the dialog and only take effect after **Save**; the dialog also offers **Default** (resets the in-progress draft to the built-in defaults, without applying it) and **Cancel** (closes the dialog and discards any unsaved changes) |
 | **About** | Shows the dialog title **About Little V** followed by the app version (**Version `X.Y.Z`**) in a smaller font, and a short application description |
 
@@ -207,11 +208,22 @@ When a single stock is selected in the Names filter, the status bar also shows, 
   - These rates are configurable in **Settings → Stock Fee** (see §6.1.5).
 - Hovering over a populated Profit cell shows the signed net-profit percentage using the same fees and stamp duty as the Profit calculation: `net_profit / (buy_price × quantity)`. Positive values are red and negative values are green.
 - An empty Buy Date or Sell Date cell has a yellow background when the matching price is present.
-- Double-clicking a row opens an **Edit transaction** dialog (see §7) pre-filled with that row's current values, allowing the quantity, buy/sell price and date fields and note to be changed and saved back to the same transaction.
+- Double-clicking a row opens an **Edit transaction** dialog (see §8) pre-filled with that row's current values, allowing the quantity, buy/sell price and date fields and note to be changed and saved back to the same transaction.
 - Each row ends with a **Delete transaction** icon button (visible on hover). Clicking it opens a confirmation dialog styled like the Create Transaction dialog, naming the affected stock; confirming permanently removes that transaction from its stock's ledger file and refreshes the table, while Cancel or closing the dialog leaves the transaction untouched. A deletion error is shown inside the confirmation dialog without closing it.
 - When no records match, show a clear empty state that directs the user to create a transaction.
 
-## 7. Create/Edit Transaction Dialog
+## 7. Merge Transactions Dialog
+
+The **Merge** menu action opens a modal **Merge transactions** dialog for combining multiple valid open transactions of the same stock and same side (all open buys, or all open sells) into a single weighted-average transaction.
+
+- **Stock**: a combobox identical in appearance to the Create dialog's, but restricted to stocks that already have at least one recorded ledger entry (no `stock-api` search). Selecting a stock loads its valid open transactions (same definition used elsewhere: an open buy needs quantity, Buy price, and Buy date with no Sell price; an open sell needs quantity, Sell price, and Sell date with no Buy price). When a live quote is available for the selected stock, its current price and percentage are shown inside the combobox after the stock name, using the same red/green market-change convention as the Create dialog and main table.
+- **Transactions table**: below the stock combobox, a table lists every valid open transaction for the selected stock, one row per transaction, with a leading checkbox column plus Side (Buy/Sell), Quantity, Price, Date, and Note columns. The table is always visible, even before a stock is selected (shown empty in that case); its area is a fixed height of exactly 4 visible rows (with a scrollbar when there are more rows, and empty space below the rows when there are fewer), and its header stays pinned while scrolling. Once a stock is selected, if it has no valid open transactions, an empty-state message is additionally shown below the (empty) table.
+- **Selection rules**: at least two rows must be checked before merging; the **Merge** button stays disabled otherwise. Checking any row of one side (buy or sell) disables the checkboxes of every row on the opposite side, so the checked rows are always the same side; unchecking all rows of the checked side re-enables the other side's checkboxes.
+- **Merge computation**: for the checked rows (all the same side), the merged transaction's quantity is the sum of the checked quantities; its price is the quantity-weighted average of the checked prices (`Σ (price × quantity) / Σ quantity`); its date is the latest (most recent) of the checked dates; its note is the non-empty notes from the checked rows joined with newlines. The merged transaction receives a new UUID and fresh creation/modification timestamps.
+- **Merge detail panel**: a detail panel is always shown directly below the transactions table (in the same dialog), using Create-style read-only controls for Quantity, Price, Date, and Note; Side is not shown in this panel. It stays visible (with blank fields) before a stock is selected or before enough rows are checked, and live-updates to show the computed merge values as soon as two or more valid open rows of the same side are checked. Clicking **Merge** then performs the merge directly.
+- Clicking **Merge** atomically replaces the checked transactions with the single merged transaction in the stock's ledger file, and the main table refreshes. A merge error (e.g. a selected transaction no longer exists) is shown inside the dialog without closing it.
+
+## 8. Create/Edit Transaction Dialog
 
 The **Create** action opens a modal dialog containing:
 
@@ -233,7 +245,7 @@ The dialog provides **Cancel** and **Save** actions. Errors from validation, loc
 
 Double-clicking a table row reopens the same dialog, titled **Edit transaction**, pre-filled with that transaction's current Quantity, Buy price/date, Sell price/date, and Note. In edit mode, the Stock field is locked (shown disabled) since a transaction cannot be moved to a different stock; only Quantity, Buy price/date, Sell price/date, and Note may be changed. Saving calls the update path and writes the same transaction record (identified by its stock code and UUID) back to its ledger file, preserving its original UUID and creation timestamp while refreshing its modification timestamp; Cancel or closing the dialog discards any changes.
 
-## 8. Acceptance Criteria
+## 9. Acceptance Criteria
 
 1. A user can save a transaction with only a buy price and date and see it as an open buy row in the table.
 2. A user can save a transaction with only a sell price and date and see it as an open sell row in the table.
@@ -245,3 +257,6 @@ Double-clicking a table row reopens the same dialog, titled **Edit transaction**
 8. A stock-search error is visible in the dialog and does not hide existing local stock choices.
 9. Clicking a row's **Delete transaction** icon opens a confirmation dialog; confirming removes that transaction from the ledger file and from the table, while Cancel leaves it unchanged. A deletion error is shown inside the dialog without removing other rows.
 10. Double-clicking a row opens an **Edit transaction** dialog pre-filled with its current values and a locked Stock field; saving updates that transaction in place (keeping its UUID and creation timestamp) and refreshes the table, while Cancel leaves the transaction unchanged.
+11. The Merge transactions dialog always shows the transactions table, even before a stock is selected; selecting a stock with no valid open transactions additionally shows an empty-state message below the table.
+12. Checking fewer than two rows keeps the **Merge** button disabled. Checking a row of one side disables the checkboxes of every row on the opposite side, preventing mixed-side selections.
+13. The Merge transactions dialog always shows a merge detail panel below the table (blank before selection); checking two or more valid open rows of the same side instantly fills it in with the computed quantity, weighted-average price, latest date, and combined note; clicking **Merge** replaces the selected transactions with one merged transaction and refreshes the table.

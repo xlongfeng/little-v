@@ -168,6 +168,16 @@ button:disabled { cursor: not-allowed; opacity: .65; }
 .field-error { margin: -4px 0 0; color: #a4262c; font-size: 14px; }
 .info-dialog { min-height: 150px; }
 .version-tag { font-size: 0.6em; font-weight: normal; color: #666; margin-left: 6px; }
+.merge-dialog { width: min(640px, calc(100vw - 32px)); }
+.merge-table-wrapper { height: 145px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 4px; }
+.merge-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.merge-table th, .merge-table td { height: 29px; padding: 0 10px; text-align: left; border-bottom: 1px solid #e0e0e0; box-sizing: border-box; }
+.merge-table th { position: sticky; top: 0; color: #808080; font-weight: 700; background: #f3f3f3; }
+.merge-table .col-merge-select { width: 32px; }
+.merge-empty { margin: 0; color: #424242; font-size: 14px; }
+.merge-detail { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #c0c0c0; border-radius: 4px; background: #f9f9f9; }
+.merge-detail input[readonly], .merge-detail textarea[readonly] { background: #f0f0f0; color: #616161; }
+.merge-detail textarea[readonly] { resize: none; }
 .row-actions { text-align: center; }
 .delete-row { font-size: 15px; color: #a4262c; opacity: 0; transition: opacity .1s ease; }
 tbody tr:hover .delete-row { opacity: 1; }
