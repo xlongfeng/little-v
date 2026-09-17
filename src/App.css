@@ -178,6 +178,12 @@ button:disabled { cursor: not-allowed; opacity: .65; }
 .merge-detail { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #c0c0c0; border-radius: 4px; background: #f9f9f9; }
 .merge-detail input[readonly], .merge-detail textarea[readonly] { background: #f0f0f0; color: #616161; }
 .merge-detail textarea[readonly] { resize: none; }
+.split-dialog { width: min(640px, calc(100vw - 32px)); }
+.split-detail-columns { display: flex; gap: 16px; }
+.split-detail-column { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.split-detail-column h3 { margin: 0; font-size: 13px; color: #808080; font-weight: 700; }
+.split-detail-column label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.split-detail-column input[readonly] { background: #f0f0f0; color: #616161; }
 .row-actions { text-align: center; }
 .delete-row { font-size: 15px; color: #a4262c; opacity: 0; transition: opacity .1s ease; }
 tbody tr:hover .delete-row { opacity: 1; }

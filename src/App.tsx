@@ -707,6 +707,7 @@ function AppContent() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<TableRow | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dataDirectory, setDataDirectory] = useState("");
@@ -1029,6 +1030,7 @@ function AppContent() {
         <nav aria-label={t("table.applicationMenu")}>
           <button type="button" onClick={() => setDialogOpen(true)}>{t("menu.create")}</button>
           <button type="button" onClick={() => setMergeOpen(true)}>{t("menu.merge")}</button>
+          <button type="button" onClick={() => setSplitOpen(true)}>{t("menu.split")}</button>
           <button type="button" onClick={openSettings}>{t("menu.settings")}</button>
           <button type="button" onClick={() => setAboutOpen(true)}>{t("menu.about")}</button>
         </nav>
@@ -1189,6 +1191,16 @@ function AppContent() {
           onClose={() => setMergeOpen(false)}
           onMerged={() => {
             setMergeOpen(false);
+            void loadLedgers();
+          }}
+        />
+      )}
+      {splitOpen && (
+        <SplitDialog
+          ledgers={ledgers}
+          onClose={() => setSplitOpen(false)}
+          onSplit={() => {
+            setSplitOpen(false);
             void loadLedgers();
           }}
         />
@@ -1867,6 +1879,299 @@ function MergeDialog({
           <button type="button" onClick={onClose}>{t("dialog.cancel")}</button>
           <button type="button" className="primary" disabled={!canMerge || saving} onClick={() => void submitMerge()}>
             {saving ? t("dialog.saving") : t("merge.mergeAction")}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SplitDialog({
+  ledgers,
+  onClose,
+  onSplit,
+}: {
+  ledgers: StockLedger[];
+  onClose: () => void;
+  onSplit: () => void;
+}) {
+  const { t } = useLanguage();
+  const { quotes } = usePriceFeed();
+  const [stockQuery, setStockQuery] = useState("");
+  const [selectedStock, setSelectedStock] = useState<StockOption | null>(null);
+  const [stockListOpen, setStockListOpen] = useState(false);
+  const stockComboboxRef = useRef<HTMLDivElement>(null);
+  const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
+  const [leftQuantity, setLeftQuantity] = useState("");
+  const [leftPrice, setLeftPrice] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const selectedQuote = selectedStock ? quotes[selectedStock.code] : undefined;
+
+  const localStocks = useMemo(() => ledgers.map(({ code, name }) => ({ code, name })), [ledgers]);
+  const filteredStocks = useMemo(() => {
+    const selectedLabel = selectedStock ? `${selectedStock.name} (${displayStockCode(selectedStock.code)})` : null;
+    const query = stockQuery === selectedLabel ? "" : stockQuery.trim().toLowerCase();
+    if (!query) {
+      return localStocks;
+    }
+    return localStocks.filter(
+      (stock) => stock.name.toLowerCase().includes(query) || stock.code.toLowerCase().includes(query),
+    );
+  }, [localStocks, stockQuery, selectedStock]);
+
+  useEffect(() => {
+    if (!stockListOpen) {
+      return;
+    }
+    const closeWhenClickedOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !stockComboboxRef.current?.contains(event.target)) {
+        setStockListOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeWhenClickedOutside);
+    return () => document.removeEventListener("pointerdown", closeWhenClickedOutside);
+  }, [stockListOpen]);
+
+  function selectStock(stock: StockOption) {
+    setSelectedStock(stock);
+    setStockQuery(`${stock.name} (${displayStockCode(stock.code)})`);
+    setStockListOpen(false);
+    setSelectedUuid(null);
+    setLeftQuantity("");
+    setLeftPrice("");
+    setError("");
+  }
+
+  const openRows = useMemo(() => {
+    if (!selectedStock) {
+      return [];
+    }
+    const ledger = ledgers.find((candidate) => candidate.code === selectedStock.code);
+    if (!ledger) {
+      return [];
+    }
+    return toTableRows([ledger]).filter((row) => isValidOpenBuy(row) || isValidOpenSell(row));
+  }, [ledgers, selectedStock]);
+
+  const selectedRow = openRows.find((row) => row.key === selectedUuid) ?? null;
+  const isSell = selectedRow ? isValidOpenSell(selectedRow) : false;
+  const originalQuantity = selectedRow?.quantity ?? null;
+  const originalPrice = selectedRow ? (isSell ? selectedRow.sellPrice : selectedRow.buyPrice) ?? null : null;
+  const priceStep = 1 / 10 ** pricePrecision(selectedStock?.code ?? "");
+
+  function selectRow(row: TableRow) {
+    setSelectedUuid(row.key);
+    const quantity = row.quantity ?? 0;
+    const half = Math.round(quantity / 200) * 100;
+    setLeftQuantity(String(half > 0 && half < quantity ? half : 100));
+    const rowPrice = isValidOpenSell(row) ? row.sellPrice : row.buyPrice;
+    setLeftPrice(rowPrice != null ? String(rowPrice) : "");
+    setError("");
+  }
+
+  const leftQuantityNumber = leftQuantity.trim() === "" ? null : Number(leftQuantity);
+  const leftPriceNumber = leftPrice.trim() === "" ? null : Number(leftPrice);
+  const rightQuantityNumber =
+    originalQuantity != null && leftQuantityNumber != null ? originalQuantity - leftQuantityNumber : null;
+  const rightPriceNumber =
+    originalQuantity != null &&
+    originalPrice != null &&
+    leftQuantityNumber != null &&
+    leftPriceNumber != null &&
+    rightQuantityNumber != null &&
+    rightQuantityNumber > 0
+      ? (originalPrice * originalQuantity - leftPriceNumber * leftQuantityNumber) / rightQuantityNumber
+      : null;
+
+  function validationError(): string {
+    if (!selectedRow) {
+      return "";
+    }
+    if (leftQuantityNumber == null || !Number.isInteger(leftQuantityNumber) || leftQuantityNumber <= 0) {
+      return t("dialog.quantityPositive");
+    }
+    if (leftQuantityNumber % 100 !== 0) {
+      return t("dialog.quantityMultiple100");
+    }
+    if (rightQuantityNumber == null || rightQuantityNumber <= 0) {
+      return t("split.quantitiesMustAddUp");
+    }
+    if (rightQuantityNumber % 100 !== 0) {
+      return t("dialog.quantityMultiple100");
+    }
+    if (leftPriceNumber == null || !(leftPriceNumber > 0)) {
+      return t("split.leftPricePositive");
+    }
+    return "";
+  }
+
+  const localError = validationError();
+  const canSplit = !!selectedRow && !localError && rightPriceNumber != null && rightPriceNumber > 0;
+
+  async function submitSplit() {
+    if (!canSplit || !selectedStock || !selectedRow) {
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await invoke("split_transaction", {
+        request: {
+          code: selectedStock.code,
+          uuid: selectedRow.key,
+          leftQuantity: leftQuantityNumber,
+          leftPrice: leftPriceNumber,
+          rightQuantity: rightQuantityNumber,
+          rightPrice: rightPriceNumber,
+        },
+      });
+      onSplit();
+    } catch (splitError) {
+      setError(String(splitError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <section className="dialog split-dialog" role="dialog" aria-label={t("split.title")}>
+        <div className="dialog-heading">
+          <h2>{t("split.title")}</h2>
+          <button type="button" className="icon-button" onClick={onClose} aria-label={t("dialog.close")}>×</button>
+        </div>
+        <label>{t("dialog.stock")}
+          <div className={`stock-combobox${selectedQuote ? " has-current-quote" : ""}`} ref={stockComboboxRef}>
+            <input
+              value={stockQuery}
+              onChange={(event) => {
+                setStockQuery(event.target.value);
+                setSelectedStock(null);
+                setSelectedUuid(null);
+                setLeftQuantity("");
+                setLeftPrice("");
+              }}
+              onFocus={() => setStockListOpen(true)}
+              placeholder={t("dialog.stockPlaceholder")}
+              role="combobox"
+              aria-label={t("dialog.stock")}
+              aria-expanded={stockListOpen}
+              aria-controls="split-stock-options"
+              aria-autocomplete="list"
+            />
+            {selectedQuote && (
+              <output className={`stock-current-quote ${quoteChangeClass(selectedQuote)}`}>
+                {selectedQuote.now.toFixed(pricePrecision(selectedStock!.code))} / {formatQuotePercent(selectedQuote)}
+              </output>
+            )}
+            <button
+              type="button"
+              className="combobox-toggle"
+              aria-label={t("dialog.showExistingStocks")}
+              onClick={() => setStockListOpen(true)}
+            >
+              ▾
+            </button>
+            {stockListOpen && (
+              <ul id="split-stock-options" className="stock-options" role="listbox">
+                {filteredStocks.map((stock) => (
+                  <li key={stock.code} role="option" aria-selected={selectedStock?.code === stock.code}>
+                    <button type="button" onClick={() => selectStock(stock)}>
+                      {stock.name} <span>({displayStockCode(stock.code)})</span>
+                    </button>
+                  </li>
+                ))}
+                {!filteredStocks.length && <li className="no-options">{t("dialog.noMatchingStocks")}</li>}
+              </ul>
+            )}
+          </div>
+        </label>
+        <div className="merge-table-wrapper">
+          <table className="merge-table">
+            <thead>
+              <tr>
+                <th className="col-merge-select" />
+                <th>{t("merge.side")}</th>
+                <th>{t("table.quantity")}</th>
+                <th>{t("merge.price")}</th>
+                <th>{t("merge.date")}</th>
+                <th>{t("table.noteLabel")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {openRows.map((row) => {
+                const rowIsSell = isValidOpenSell(row);
+                const rowPrice = rowIsSell ? row.sellPrice : row.buyPrice;
+                return (
+                  <tr key={row.key}>
+                    <td>
+                      <input
+                        type="radio"
+                        name="split-row"
+                        checked={selectedUuid === row.key}
+                        onChange={() => selectRow(row)}
+                        aria-label={t("split.selectRow")}
+                      />
+                    </td>
+                    <td>{rowIsSell ? t("merge.sell") : t("merge.buy")}</td>
+                    <td>{row.quantity}</td>
+                    <td>{rowPrice != null ? rowPrice.toFixed(pricePrecision(row.code)) : ""}</td>
+                    <td>{rowIsSell ? row.sellDate : row.buyDate}</td>
+                    <td>{row.note}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {selectedStock && !openRows.length && <p className="merge-empty">{t("split.noOpenTransactions")}</p>}
+        {(error || localError) && <p className="field-error" role="alert">{error || localError}</p>}
+        <div className="merge-detail split-detail">
+          <div className="split-detail-columns">
+            <div className="split-detail-column">
+              <h3>{t("split.left")}</h3>
+              <label>{t("table.quantity")}
+                <input
+                  type="number"
+                  min="0"
+                  step="100"
+                  inputMode="numeric"
+                  disabled={!selectedRow}
+                  value={leftQuantity}
+                  onChange={(event) => setLeftQuantity(event.target.value.split(".")[0])}
+                />
+              </label>
+              <label>{t("merge.price")}
+                <input
+                  type="number"
+                  min="0.01"
+                  step={priceStep}
+                  disabled={!selectedRow}
+                  value={leftPrice}
+                  onChange={(event) => setLeftPrice(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="split-detail-column">
+              <h3>{t("split.right")}</h3>
+              <label>{t("table.quantity")}
+                <input type="number" readOnly value={rightQuantityNumber ?? ""} />
+              </label>
+              <label>{t("merge.price")}
+                <input
+                  type="number"
+                  readOnly
+                  value={rightPriceNumber != null ? rightPriceNumber.toFixed(pricePrecision(selectedStock?.code ?? "")) : ""}
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+        <div className="dialog-actions">
+          <button type="button" onClick={onClose}>{t("dialog.cancel")}</button>
+          <button type="button" className="primary" disabled={!canSplit || saving} onClick={() => void submitSplit()}>
+            {saving ? t("dialog.saving") : t("split.splitAction")}
           </button>
         </div>
       </section>

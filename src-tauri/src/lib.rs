@@ -77,6 +77,17 @@ pub struct MergeTransactionsRequest {
     pub note: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SplitTransactionRequest {
+    pub code: String,
+    pub uuid: String,
+    pub left_quantity: Option<i64>,
+    pub left_price: Option<f64>,
+    pub right_quantity: Option<i64>,
+    pub right_price: Option<f64>,
+}
+
 struct StorageInner {
     root: PathBuf,
     _watcher: RecommendedWatcher,
@@ -448,6 +459,76 @@ fn merge_transactions_in(
     Ok(merged)
 }
 
+fn split_transaction_in(
+    storage_root: &Path,
+    request: SplitTransactionRequest,
+) -> Result<(Transaction, Transaction), String> {
+    let code = request.code.trim().to_uppercase();
+    let path = stock_path(storage_root, &code)?;
+    if !path.exists() {
+        return Err(format!("No ledger found for stock code {code}."));
+    }
+
+    let content = fs::read_to_string(&path)
+        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
+    let mut ledger: StockLedger = serde_json::from_str(&content)
+        .map_err(|error| format!("Could not parse {}: {error}", path.display()))?;
+
+    let original = ledger
+        .transactions
+        .iter()
+        .find(|transaction| transaction.uuid == request.uuid)
+        .cloned()
+        .ok_or_else(|| "Transaction not found.".to_string())?;
+
+    let is_buy = original.buy_price.is_some();
+    let original_quantity = original
+        .quantity
+        .ok_or_else(|| "Only transactions with a quantity can be split.".to_string())?;
+
+    let (left_quantity, right_quantity) = match (request.left_quantity, request.right_quantity) {
+        (Some(left), Some(right)) => (left, right),
+        _ => return Err("Both split quantities are required.".into()),
+    };
+    if left_quantity + right_quantity != original_quantity {
+        return Err("The split quantities must add up to the original quantity.".into());
+    }
+
+    let build_side = |quantity: i64, price: Option<f64>| -> Result<Transaction, String> {
+        validate_fields(
+            Some(quantity),
+            if is_buy { price } else { None },
+            if is_buy { original.buy_date.as_ref() } else { None },
+            if is_buy { None } else { price },
+            if is_buy { None } else { original.sell_date.as_ref() },
+        )?;
+        let now = timestamp();
+        Ok(Transaction {
+            uuid: Uuid::new_v4().to_string(),
+            create_date: now.clone(),
+            modify_date: now,
+            quantity: Some(quantity),
+            buy_price: if is_buy { round_price(price, &code) } else { None },
+            buy_date: if is_buy { original.buy_date.clone() } else { None },
+            sell_price: if is_buy { None } else { round_price(price, &code) },
+            sell_date: if is_buy { None } else { original.sell_date.clone() },
+            note: original.note.clone(),
+        })
+    };
+
+    let left = build_side(left_quantity, request.left_price)?;
+    let right = build_side(right_quantity, request.right_price)?;
+
+    ledger
+        .transactions
+        .retain(|transaction| transaction.uuid != request.uuid);
+    ledger.transactions.push(left.clone());
+    ledger.transactions.push(right.clone());
+
+    write_json_file(&path, &ledger)?;
+    Ok((left, right))
+}
+
 fn is_ledger_event(event: &Event) -> bool {
     matches!(
         event.kind,
@@ -634,6 +715,16 @@ fn merge_transactions(
 ) -> Result<Transaction, String> {
     let inner = state.lock()?;
     merge_transactions_in(&inner.root, request)
+}
+
+#[tauri::command]
+fn split_transaction(
+    state: State<'_, StorageState>,
+    request: SplitTransactionRequest,
+) -> Result<Vec<Transaction>, String> {
+    let inner = state.lock()?;
+    let (left, right) = split_transaction_in(&inner.root, request)?;
+    Ok(vec![left, right])
 }
 
 #[cfg(test)]
@@ -1147,6 +1238,97 @@ mod tests {
         );
         assert!(result.unwrap_err().contains("not be found"));
     }
+
+    #[test]
+    fn splits_an_open_buy_into_two_transactions_conserving_total_value() {
+        let directory = tempdir().unwrap();
+        let created = save_transaction_to(
+            directory.path(),
+            CreateTransactionRequest {
+                quantity: Some(300),
+                buy_price: Some(10.0),
+                buy_date: Some("2026-09-01".into()),
+                note: Some("original".into()),
+                ..base_request()
+            },
+        )
+        .unwrap();
+
+        let (left, right) = split_transaction_in(
+            directory.path(),
+            SplitTransactionRequest {
+                code: "EXAMPLE".into(),
+                uuid: created.uuid.clone(),
+                left_quantity: Some(100),
+                left_price: Some(12.0),
+                right_quantity: Some(200),
+                right_price: Some(9.0),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(left.quantity, Some(100));
+        assert_eq!(left.buy_price, Some(12.0));
+        assert_eq!(left.buy_date, Some("2026-09-01".into()));
+        assert_eq!(left.note, Some("original".into()));
+        assert_eq!(right.quantity, Some(200));
+        assert_eq!(right.buy_price, Some(9.0));
+        assert_eq!(right.buy_date, Some("2026-09-01".into()));
+        assert_eq!(right.note, Some("original".into()));
+
+        let ledger = load_ledgers_from(directory.path()).unwrap().pop().unwrap();
+        assert_eq!(ledger.transactions.len(), 2);
+        assert!(ledger
+            .transactions
+            .iter()
+            .all(|transaction| transaction.uuid != created.uuid));
+    }
+
+    #[test]
+    fn rejects_splitting_when_quantities_do_not_add_up_to_the_original() {
+        let directory = tempdir().unwrap();
+        let created = save_transaction_to(
+            directory.path(),
+            CreateTransactionRequest {
+                quantity: Some(300),
+                buy_price: Some(10.0),
+                ..base_request()
+            },
+        )
+        .unwrap();
+
+        let result = split_transaction_in(
+            directory.path(),
+            SplitTransactionRequest {
+                code: "EXAMPLE".into(),
+                uuid: created.uuid,
+                left_quantity: Some(100),
+                left_price: Some(12.0),
+                right_quantity: Some(100),
+                right_price: Some(9.0),
+            },
+        );
+        assert!(result.unwrap_err().contains("add up"));
+    }
+
+    #[test]
+    fn rejects_splitting_a_transaction_that_does_not_exist() {
+        let directory = tempdir().unwrap();
+        save_transaction_to(directory.path(), base_request()).unwrap();
+
+        let result = split_transaction_in(
+            directory.path(),
+            SplitTransactionRequest {
+                code: "EXAMPLE".into(),
+                uuid: "missing-uuid".into(),
+                left_quantity: Some(50),
+                left_price: Some(10.0),
+                right_quantity: Some(50),
+                right_price: Some(10.0),
+            },
+        );
+        assert!(result.unwrap_err().contains("not found"));
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1183,7 +1365,8 @@ pub fn run() {
             create_transaction,
             delete_transaction,
             update_transaction,
-            merge_transactions
+            merge_transactions,
+            split_transaction
         ])
         .run(tauri::generate_context!())
         .expect("error while running Tauri application");

@@ -1999,3 +1999,181 @@ describe("Merge transactions", () => {
     expect(quote.closest(".stock-combobox")).not.toBeNull();
   });
 });
+
+describe("Split transaction", () => {
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+  });
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    invoke.mockReset();
+    listen.mockReset();
+    open.mockReset();
+    searchStocks.mockReset();
+    fetchQuotes.mockReset();
+    fetchQuotes.mockResolvedValue({});
+    listen.mockResolvedValue(vi.fn());
+    open.mockResolvedValue(null);
+    const ledgers = [
+      {
+        code: "SH600002",
+        name: "Multi Stock",
+        transactions: [
+          {
+            uuid: "buy-a",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 200,
+            buyPrice: 12,
+            buyDate: "2026-09-03",
+            note: "Second lot",
+          },
+          {
+            uuid: "sell-a",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            sellPrice: 15,
+            sellDate: "2026-09-02",
+          },
+          {
+            uuid: "closed",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            buyPrice: 8,
+            buyDate: "2026-08-01",
+            sellPrice: 9,
+            sellDate: "2026-08-05",
+          },
+        ],
+      },
+      {
+        code: "SH600003",
+        name: "Empty Stock",
+        transactions: [
+          {
+            uuid: "closed-only",
+            createDate: "1",
+            modifyDate: "1",
+            quantity: 100,
+            buyPrice: 8,
+            buyDate: "2026-08-01",
+            sellPrice: 9,
+            sellDate: "2026-08-05",
+          },
+        ],
+      },
+    ];
+    invoke.mockImplementation((command, args) => {
+      if (command === "load_stock_ledgers") {
+        return Promise.resolve(ledgers);
+      }
+      if (command === "get_data_directory" || command === "get_default_data_directory") {
+        return Promise.resolve("C:\\Users\\Example\\Documents\\Little V");
+      }
+      if (command === "set_data_directory") {
+        return Promise.resolve((args as { directory: string }).directory);
+      }
+      return Promise.resolve(undefined);
+    });
+  });
+
+  async function selectSplitStock(user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement, name: string) {
+    const stockInput = within(dialog).getByRole("combobox", { name: "Stock" });
+    await user.type(stockInput, name);
+    await user.click(within(dialog).getByRole("button", { name: new RegExp(name) }));
+  }
+
+  it("shows the transactions table before any stock is selected", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByText("Multi Stock", { selector: ".stock-name" });
+
+    await user.click(screen.getByRole("button", { name: "Split" }));
+    const dialog = screen.getByRole("dialog", { name: "Split transaction" });
+
+    expect(within(dialog).getByRole("table")).toBeInTheDocument();
+    expect(within(dialog).queryAllByRole("radio")).toHaveLength(0);
+    expect(dialog.querySelector(".split-detail")).toBeInTheDocument();
+  });
+
+  it("shows an empty state when the selected stock has no valid open transactions", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByText("Multi Stock", { selector: ".stock-name" });
+
+    await user.click(screen.getByRole("button", { name: "Split" }));
+    const dialog = screen.getByRole("dialog", { name: "Split transaction" });
+    await selectSplitStock(user, dialog, "Empty Stock");
+
+    expect(
+      within(dialog).getByText("This stock has no valid open transactions to split."),
+    ).toBeInTheDocument();
+  });
+
+  it("defaults the left quantity to half of the selected transaction and computes the right side to conserve value", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByText("Multi Stock", { selector: ".stock-name" });
+
+    await user.click(screen.getByRole("button", { name: "Split" }));
+    const dialog = screen.getByRole("dialog", { name: "Split transaction" });
+    await selectSplitStock(user, dialog, "Multi Stock");
+
+    const rows = within(dialog).getAllByRole("row").filter((row) => within(row).queryByRole("radio"));
+    const buyRow = rows.find((row) => within(row).queryByText("12.00"))!;
+    await user.click(within(buyRow).getByRole("radio"));
+
+    expect(within(dialog).getAllByRole("spinbutton", { name: "Quantity" })[0]).toHaveValue(100);
+    const splitButton = within(dialog).getByRole("button", { name: "Split" });
+    expect(splitButton).toBeEnabled();
+
+    await user.click(splitButton);
+
+    expect(invoke).toHaveBeenCalledWith("split_transaction", {
+      request: {
+        code: "SH600002",
+        uuid: "buy-a",
+        leftQuantity: 100,
+        leftPrice: 12,
+        rightQuantity: 100,
+        rightPrice: 12,
+      },
+    });
+  });
+
+  it("recomputes the right price when the left price is edited", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByText("Multi Stock", { selector: ".stock-name" });
+
+    await user.click(screen.getByRole("button", { name: "Split" }));
+    const dialog = screen.getByRole("dialog", { name: "Split transaction" });
+    await selectSplitStock(user, dialog, "Multi Stock");
+
+    const rows = within(dialog).getAllByRole("row").filter((row) => within(row).queryByRole("radio"));
+    const buyRow = rows.find((row) => within(row).queryByText("12.00"))!;
+    await user.click(within(buyRow).getByRole("radio"));
+
+    const priceInputs = within(dialog).getAllByRole("spinbutton", { name: "Price" });
+    await user.clear(priceInputs[0]);
+    await user.type(priceInputs[0], "14");
+
+    expect(within(dialog).getAllByRole("spinbutton", { name: "Price" })[1]).toHaveValue(10);
+  });
+
+  it("disables the Split button until a transaction is selected", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByText("Multi Stock", { selector: ".stock-name" });
+
+    await user.click(screen.getByRole("button", { name: "Split" }));
+    const dialog = screen.getByRole("dialog", { name: "Split transaction" });
+    await selectSplitStock(user, dialog, "Multi Stock");
+
+    expect(within(dialog).getByRole("button", { name: "Split" })).toBeDisabled();
+  });
+});

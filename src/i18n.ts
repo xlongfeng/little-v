@@ -9,6 +9,7 @@ type Dictionary = Record<string, string>;
 const en: Dictionary = {
   "menu.create": "Create",
   "menu.merge": "Merge",
+  "menu.split": "Split",
   "menu.settings": "Settings",
   "menu.about": "About",
   "totalProfit": "{value}",
@@ -123,11 +124,20 @@ const en: Dictionary = {
   "merge.selectRow": "Select transaction",
   "merge.noOpenTransactions": "This stock has no valid open transactions to merge.",
   "merge.mergeAction": "Merge",
+  "split.title": "Split transaction",
+  "split.selectRow": "Select transaction",
+  "split.noOpenTransactions": "This stock has no valid open transactions to split.",
+  "split.left": "Transaction 1",
+  "split.right": "Transaction 2",
+  "split.splitAction": "Split",
+  "split.quantitiesMustAddUp": "The split quantities must add up to the original quantity.",
+  "split.leftPricePositive": "Transaction 1 price must be greater than zero.",
 };
 
 const zh_cn: Dictionary = {
   "menu.create": "新建",
   "menu.merge": "合并",
+  "menu.split": "拆分",
   "menu.settings": "设置",
   "menu.about": "关于",
   "totalProfit": "{value}",
@@ -242,6 +252,14 @@ const zh_cn: Dictionary = {
   "merge.selectRow": "选择交易",
   "merge.noOpenTransactions": "该股票没有可合并的有效持仓交易。",
   "merge.mergeAction": "合并",
+  "split.title": "拆分交易",
+  "split.selectRow": "选择交易",
+  "split.noOpenTransactions": "该股票没有可拆分的有效持仓交易。",
+  "split.left": "交易1",
+  "split.right": "交易2",
+  "split.splitAction": "拆分",
+  "split.quantitiesMustAddUp": "拆分后的数量之和必须等于原数量。",
+  "split.leftPricePositive": "交易1价格必须大于零。",
 };
 
 const translations: Record<Language, Dictionary> = { en, zh_cn };

@@ -96,6 +96,7 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | --- | --- |
 | **Create** | Opens the transaction creation dialog |
 | **Merge** | Opens the Merge transactions dialog (see §7) |
+| **Split** | Opens the Split transaction dialog (see §8) |
 | **Settings** | Shows **General** (Language and data folder), **Stock Quotes** (refresh interval), **Stock Fee** (stamp duty rate, trade fee rate, minimum trade fee), and **Price Change Alert** (Gain and Loss thresholds) groups. All changes are staged in the dialog and only take effect after **Save**; the dialog also offers **Default** (resets the in-progress draft to the built-in defaults, without applying it) and **Cancel** (closes the dialog and discards any unsaved changes) |
 | **About** | Shows the dialog title **About Little V** followed by the app version (**Version `X.Y.Z`**) in a smaller font, and a short application description |
 
@@ -208,7 +209,7 @@ When a single stock is selected in the Names filter, the status bar also shows, 
   - These rates are configurable in **Settings → Stock Fee** (see §6.1.5).
 - Hovering over a populated Profit cell shows the signed net-profit percentage using the same fees and stamp duty as the Profit calculation: `net_profit / (buy_price × quantity)`. Positive values are red and negative values are green.
 - An empty Buy Date or Sell Date cell has a yellow background when the matching price is present.
-- Double-clicking a row opens an **Edit transaction** dialog (see §8) pre-filled with that row's current values, allowing the quantity, buy/sell price and date fields and note to be changed and saved back to the same transaction.
+- Double-clicking a row opens an **Edit transaction** dialog (see §9) pre-filled with that row's current values, allowing the quantity, buy/sell price and date fields and note to be changed and saved back to the same transaction.
 - Each row ends with a **Delete transaction** icon button (visible on hover). Clicking it opens a confirmation dialog styled like the Create Transaction dialog, naming the affected stock; confirming permanently removes that transaction from its stock's ledger file and refreshes the table, while Cancel or closing the dialog leaves the transaction untouched. A deletion error is shown inside the confirmation dialog without closing it.
 - When no records match, show a clear empty state that directs the user to create a transaction.
 
@@ -223,7 +224,20 @@ The **Merge** menu action opens a modal **Merge transactions** dialog for combin
 - **Merge detail panel**: a detail panel is always shown directly below the transactions table (in the same dialog), using Create-style read-only controls for Quantity, Price, Date, and Note; Side is not shown in this panel. It stays visible (with blank fields) before a stock is selected or before enough rows are checked, and live-updates to show the computed merge values as soon as two or more valid open rows of the same side are checked. Clicking **Merge** then performs the merge directly.
 - Clicking **Merge** atomically replaces the checked transactions with the single merged transaction in the stock's ledger file, and the main table refreshes. A merge error (e.g. a selected transaction no longer exists) is shown inside the dialog without closing it.
 
-## 8. Create/Edit Transaction Dialog
+## 8. Split Transaction Dialog
+
+The **Split** menu action opens a modal **Split transaction** dialog for dividing a single valid open transaction into two sub-transactions of the same side (both buys, or both sells).
+
+- **Stock**: a combobox identical to the Merge dialog's, restricted to stocks that already have at least one recorded ledger entry (no `stock-api` search), with the same live-quote display next to the stock name. Selecting a stock loads its valid open transactions (same open-buy/open-sell definition used elsewhere).
+- **Transactions table**: below the stock combobox, a table lists every valid open transaction for the selected stock, one row per transaction, with a leading single-select radio-button column plus Side (Buy/Sell), Quantity, Price, Date, and Note columns. The table is always visible, even before a stock is selected (shown empty in that case); its area is a fixed height of exactly 4 visible rows (with a scrollbar when there are more rows), and its header stays pinned while scrolling. Once a stock is selected, if it has no valid open transactions, an empty-state message is additionally shown below the (empty) table. Only one transaction can be selected at a time.
+- **Split detail panel**: a detail panel is always shown directly below the transactions table (in the same dialog), with a **Transaction 1** column and a **Transaction 2** column side by side, each showing Quantity and Price inputs. It stays visible (with blank/empty fields) before a transaction is selected.
+  - The **Transaction 1** column's Quantity and Price are editable. When a transaction is selected, Quantity defaults to half of the original quantity (rounded to the nearest multiple of 100) and Price defaults to the original transaction's price.
+  - The **Transaction 2** column's Quantity and Price are shown as read-only inputs, auto-calculated: its quantity is the original quantity minus Transaction 1's quantity; its price is computed so the total value is conserved (`(originalPrice × originalQuantity − transaction1Price × transaction1Quantity) / transaction2Quantity`).
+  - Transaction 1 and Transaction 2 quantities must each be a positive multiple of 100 and must add up to the original quantity; the Transaction 1 price must be greater than zero. Validation errors are shown inline and the **Split** button stays disabled until the values are valid and a transaction is selected.
+- Both resulting transactions keep the original transaction's date and note (not shown in the detail panel, but preserved unchanged in the ledger).
+- Clicking **Split** atomically replaces the selected transaction with the two resulting transactions (each with a new UUID and fresh creation/modification timestamps) in the stock's ledger file, and the main table refreshes. A split error (e.g. the selected transaction no longer exists) is shown inside the dialog without closing it.
+
+## 9. Create/Edit Transaction Dialog
 
 The **Create** action opens a modal dialog containing:
 
@@ -245,7 +259,7 @@ The dialog provides **Cancel** and **Save** actions. Errors from validation, loc
 
 Double-clicking a table row reopens the same dialog, titled **Edit transaction**, pre-filled with that transaction's current Quantity, Buy price/date, Sell price/date, and Note. In edit mode, the Stock field is locked (shown disabled) since a transaction cannot be moved to a different stock; only Quantity, Buy price/date, Sell price/date, and Note may be changed. Saving calls the update path and writes the same transaction record (identified by its stock code and UUID) back to its ledger file, preserving its original UUID and creation timestamp while refreshing its modification timestamp; Cancel or closing the dialog discards any changes.
 
-## 9. Acceptance Criteria
+## 10. Acceptance Criteria
 
 1. A user can save a transaction with only a buy price and date and see it as an open buy row in the table.
 2. A user can save a transaction with only a sell price and date and see it as an open sell row in the table.
@@ -260,3 +274,6 @@ Double-clicking a table row reopens the same dialog, titled **Edit transaction**
 11. The Merge transactions dialog always shows the transactions table, even before a stock is selected; selecting a stock with no valid open transactions additionally shows an empty-state message below the table.
 12. Checking fewer than two rows keeps the **Merge** button disabled. Checking a row of one side disables the checkboxes of every row on the opposite side, preventing mixed-side selections.
 13. The Merge transactions dialog always shows a merge detail panel below the table (blank before selection); checking two or more valid open rows of the same side instantly fills it in with the computed quantity, weighted-average price, latest date, and combined note; clicking **Merge** replaces the selected transactions with one merged transaction and refreshes the table.
+14. The Split transaction dialog always shows the transactions table and split detail panel, even before a stock is selected; selecting a stock with no valid open transactions additionally shows an empty-state message below the table.
+15. Selecting a transaction to split defaults Transaction 1's quantity to half of the original quantity (rounded to the nearest multiple of 100) and its price to the original price; Transaction 2's quantity and price update automatically to conserve the total value as Transaction 1's quantity or price are edited.
+16. The **Split** button stays disabled until a transaction is selected and both quantities are positive multiples of 100 that add up to the original quantity with a positive Transaction 1 price; clicking **Split** replaces the selected transaction with the two resulting transactions (sharing the original date and note) and refreshes the table.
