@@ -7,7 +7,7 @@ const STORAGE_KEY = "littlev-language";
 type Dictionary = Record<string, string>;
 
 const en: Dictionary = {
-  "menu.create": "Create",
+  "menu.create": "New",
   "menu.merge": "Merge",
   "menu.split": "Split",
   "menu.settings": "Settings",

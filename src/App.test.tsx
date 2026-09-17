@@ -415,7 +415,7 @@ describe("App", () => {
     expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
     await waitFor(() => expect(fetchQuotes).toHaveBeenCalled());
 
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
     await user.click(screen.getByRole("button", { name: "Show existing stocks" }));
     await user.click(screen.getByRole("button", { name: "Example Bank (600000)" }));
     const createQuote = await screen.findByText("10.42 / +15.78%");
@@ -1425,7 +1425,7 @@ describe("App", () => {
     searchStocks.mockResolvedValue([{ code: "SZ000001", name: "Search Result" }]);
     render(<App />);
     await screen.findByText("Example Bank", { selector: ".stock-name" });
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     const stockInput = screen.getByRole("combobox", { name: "Stock" });
     await user.type(stockInput, "result{Enter}");
@@ -1442,7 +1442,7 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
     await screen.findByText("Example Bank", { selector: ".stock-name" });
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
     await user.click(screen.getByRole("button", { name: "Show existing stocks" }));
     expect(screen.getByRole("listbox")).toBeInTheDocument();
 
@@ -1455,7 +1455,7 @@ describe("App", () => {
     const user = userEvent.setup();
     invoke.mockResolvedValue([]);
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     searchStocks.mockResolvedValue([{ code: "SH600001", name: "New Bank" }]);
     const stockInput = screen.getByRole("combobox", { name: "Stock" });
@@ -1486,7 +1486,7 @@ describe("App", () => {
     const user = userEvent.setup();
     invoke.mockResolvedValue([]);
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     searchStocks.mockResolvedValue([{ code: "SH600001", name: "New Bank" }]);
     const stockInput = screen.getByRole("combobox", { name: "Stock" });
@@ -1515,7 +1515,7 @@ describe("App", () => {
     const user = userEvent.setup();
     invoke.mockResolvedValue([]);
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     searchStocks.mockResolvedValue([{ code: "SH600001", name: "New Bank" }]);
     const stockInput = screen.getByRole("combobox", { name: "Stock" });
@@ -1544,7 +1544,7 @@ describe("App", () => {
     const user = userEvent.setup();
     invoke.mockResolvedValue([]);
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     searchStocks.mockResolvedValue([{ code: "SH600001", name: "New Bank" }]);
     const stockInput = screen.getByRole("combobox", { name: "Stock" });
@@ -1570,7 +1570,7 @@ describe("App", () => {
     const user = userEvent.setup();
     invoke.mockResolvedValue([]);
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     searchStocks.mockResolvedValue([{ code: "SH600001", name: "New Bank" }]);
     const stockInput = screen.getByRole("combobox", { name: "Stock" });
@@ -1590,7 +1590,7 @@ describe("App", () => {
     const user = userEvent.setup();
     invoke.mockResolvedValue([]);
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     searchStocks.mockResolvedValue([{ code: "SH600001", name: "New Bank" }]);
     const stockInput = screen.getByRole("combobox", { name: "Stock" });
@@ -1608,7 +1608,7 @@ describe("App", () => {
     const user = userEvent.setup();
     invoke.mockResolvedValue([]);
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     expect(screen.getByLabelText("Buy date")).toHaveClass("date-empty");
     expect(screen.getByLabelText("Sell date")).toHaveClass("date-empty");
@@ -1622,7 +1622,7 @@ describe("App", () => {
     const user = userEvent.setup();
     invoke.mockResolvedValue([]);
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     searchStocks.mockResolvedValue([{ code: "SH600001", name: "New Bank" }]);
     const stockInput = screen.getByRole("combobox", { name: "Stock" });
@@ -1640,7 +1640,7 @@ describe("App", () => {
     const user = userEvent.setup();
     invoke.mockResolvedValue([]);
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     searchStocks.mockResolvedValue([{ code: "SH600001", name: "New Bank" }]);
     const stockInput = screen.getByRole("combobox", { name: "Stock" });
@@ -1663,7 +1663,7 @@ describe("App", () => {
     const user = userEvent.setup();
     invoke.mockResolvedValue([]);
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     searchStocks.mockResolvedValue([{ code: "SH600001", name: "New Bank" }]);
     const stockInput = screen.getByRole("combobox", { name: "Stock" });
@@ -1718,7 +1718,7 @@ describe("App", () => {
   it("requires a stock to be selected before saving", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     await user.click(screen.getByRole("button", { name: "Save" }));
 
@@ -1729,7 +1729,7 @@ describe("App", () => {
   it("shows a validation error when quantity is not a multiple of 100", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     searchStocks.mockResolvedValue([{ code: "SH600001", name: "New Bank" }]);
     const stockInput = screen.getByRole("combobox", { name: "Stock" });
@@ -1750,7 +1750,7 @@ describe("App", () => {
   it("strips decimal points typed into the quantity field", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "New" }));
 
     const quantityInput = screen.getByLabelText("Quantity") as HTMLInputElement;
     await user.clear(quantityInput);

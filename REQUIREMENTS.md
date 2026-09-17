@@ -94,7 +94,7 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 
 | Menu item | Behavior |
 | --- | --- |
-| **Create** | Opens the transaction creation dialog |
+| **New** | Opens the transaction creation dialog |
 | **Merge** | Opens the Merge transactions dialog (see §7) |
 | **Split** | Opens the Split transaction dialog (see §8) |
 | **Settings** | Shows **General** (Language and data folder), **Stock Quotes** (refresh interval), **Stock Fee** (stamp duty rate, trade fee rate, minimum trade fee), and **Price Change Alert** (Gain and Loss thresholds) groups. All changes are staged in the dialog and only take effect after **Save**; the dialog also offers **Default** (resets the in-progress draft to the built-in defaults, without applying it) and **Cancel** (closes the dialog and discards any unsaved changes) |
@@ -239,7 +239,7 @@ The **Split** menu action opens a modal **Split transaction** dialog for dividin
 
 ## 9. Create/Edit Transaction Dialog
 
-The **Create** action opens a modal dialog containing:
+The **New** action opens a modal dialog containing:
 
 | Field | Description |
 | --- | --- |
