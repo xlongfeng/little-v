@@ -44,6 +44,14 @@ export function pricePrecision(code: string): number {
   return isEtfOrLofCode(code) ? 3 : 2;
 }
 
+export function displayStockName(name: string): string {
+  return name.replace(/(?:ETF|LOF).*$/i, "").trimEnd();
+}
+
+export function displayStockCode(code: string): string {
+  return code.replace(/^[A-Za-z]+/, "");
+}
+
 const TRADE_FEE_RATE = 0.00025;
 const MIN_TRADE_FEE = 5;
 const STOCK_STAMP_DUTY_RATE = 0.0005;

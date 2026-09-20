@@ -21,6 +21,7 @@
 | Stock selection | A unified combobox for existing stocks and search through [`stock-api`](https://github.com/zhangxiangliang/stock-api) |
 | Ledger behavior | Transactions can be created, edited (double-click a row), and deleted (via a delete icon at the end of each row) |
 | Lot shape | Each transaction directly carries its own optional buy price/date and sell price/date |
+| Stock ticker | A configurable always-on-top floating window showing an ordered stock watchlist, current prices, percentage changes, and optional price alarms |
 
 The first release does **not** include partial lot closing, portfolio performance calculations, or cloud synchronization.
 
@@ -97,8 +98,11 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | **New** | Opens the transaction creation dialog |
 | **Merge** | Opens the Merge transactions dialog (see §7) |
 | **Split** | Opens the Split transaction dialog (see §8) |
-| **Settings** | Shows **General** (Language and data folder), **Stock Quotes** (refresh interval), **Stock Fee** (stamp duty rate, trade fee rate, minimum trade fee), and **Price Change Alert** (Gain and Loss thresholds) groups. All changes are staged in the dialog and only take effect after **Save**; the dialog also offers **Default** (resets the in-progress draft to the built-in defaults, without applying it) and **Cancel** (closes the dialog and discards any unsaved changes) |
+| **Ticker** | Opens the **Ticker** dialog embedded in the main window (see §9) |
+| **Settings** | A tabbed dialog (Chrome-settings style) with **General** (Language, data folder), **Ticker** (refresh interval and window opacity), **Stock Fee** (stamp duty rate, trade fee rate, minimum trade fee), and **Price Change Alert** (Gain and Loss thresholds) tabs. Only one tab's fields are shown at a time; switching tabs does not discard unsaved edits in other tabs. All changes are staged in the dialog and only take effect after **Save**; the dialog also offers **Default** (resets the in-progress draft to the built-in defaults, without applying it) and **Cancel** (closes the dialog and discards any unsaved changes) |
 | **About** | Shows the dialog title **About Little V** followed by the app version (**Version `X.Y.Z`**) in a smaller font, and a short application description |
+
+The menu bar also has a ticker-visibility button at its far right. Clicking it toggles the floating ticker window between visible and hidden.
 
 At the far right of the Filters bar, the count of currently visible rows (i.e. after applying the Filters) is shown, such as `0 records`.
 
@@ -115,27 +119,36 @@ When a single stock is selected in the Names filter, the status bar also shows, 
 
 ### 6.1.2 Live price refresh
 
-- A background task periodically fetches the current market quote (current price, previous close, and change rate) for every stock code present in the ledger, independent of the active Names/Status/Period filters.
-- The refresh interval defaults to **3 seconds** and is configurable in **Settings → Stock Quotes → Refresh interval (seconds)** (minimum 1 second); the chosen value takes effect after **Save** and is persisted in browser `localStorage` (`littlev-price-refresh-seconds`).
-- Polling is skipped while the application window is not visible (e.g. minimized) and resumes immediately, refreshing right away, once the window becomes visible again.
+- One application-wide background task periodically fetches the current market quote (current price, previous close, and change rate) for the union of stock codes requested by the transaction ledger, saved ticker watchlist, and open Ticker dialog, independent of the active Names/Status/Period filters.
+- The task stores successful results in a global native Tauri quote cache and broadcasts cache updates to every application WebView. The main window, floating ticker, and Ticker dialog consume this shared cache rather than starting separate quote requests.
+- The refresh interval defaults to **3 seconds** and is configurable in **Settings → Ticker → Refresh interval (seconds)** (minimum 1 second); the chosen value takes effect after **Save** and is persisted in browser `localStorage` (`littlev-price-refresh-seconds`).
+- The global quote task continues while individual application windows are hidden, so showing the floating ticker can immediately use the latest cached values.
 - A quote that fails to load (e.g. a transient network error) leaves the previously fetched quote in place rather than clearing it or interrupting the polling loop.
 - The latest quotes are held in memory only and are not persisted to disk.
 
+### 6.1.2b Floating ticker window opacity
+
+- **Settings → Ticker → Window opacity (%)** is a slider (range `10`–`100`, step `5`) controlling the floating ticker window's transparency; the current value is shown next to it (e.g. `80%`).
+- Dragging the slider immediately previews the new opacity on the floating ticker window (broadcast live via a `ticker-opacity-changed` event, applied as CSS opacity), the same way the Language dropdown immediately previews a language, without persisting the change until **Save**.
+- The setting defaults to `100` (fully opaque); the applied value is persisted in browser `localStorage` (`littlev-ticker-opacity`) only after **Save**.
+- Closing the dialog with **Cancel** or its close button reverts the floating window back to the previously applied opacity.
+- The floating window applies the currently persisted opacity on startup and updates its live display whenever the setting changes while it is open, without writing preview values back to `localStorage` itself — only **Save** persists a new value.
+
 ### 6.1.3 Settings dialog editing model
 
-- The Settings dialog stages every field (Language, data folder, Refresh interval, Stock Fee fields, and Price Change Alert fields) in a local draft; opening the dialog initializes the draft from the currently applied values. Language selection is the exception in presentation only: it immediately previews the selected language, without applying or persisting it.
-- **Save** validates and applies the entire draft at once (data folder, Language, Refresh interval, Stock Fee settings, and Price Change Alert settings together). Every applied setting is persisted in browser `localStorage`.
-- **Default** resets only the in-progress draft to the built-in defaults (System Default language, 3-second refresh interval, and the default Stock Fee and Price Change Alert values below); it does **not** apply or persist anything until **Save** is subsequently clicked.
-- **Cancel** (and the dialog's close button) discards the draft, restores the previously applied language if it was being previewed, and closes the dialog without applying or persisting any changes; the next time Settings is opened, the draft is rebuilt from the still-current applied values.
-- Save rejects the draft when the data folder is blank or unavailable, the refresh interval is below one second, or a Stock Fee field is not a finite, non-negative number; no draft values are applied in that case.
+- The Settings dialog stages every field (Language, data folder, Refresh interval, floating ticker window opacity, Stock Fee fields, and Price Change Alert fields) in a local draft; opening the dialog initializes the draft from the currently applied values. Language selection and floating ticker window opacity are exceptions in presentation only: each immediately previews the selected value, without applying or persisting it.
+- **Save** validates and applies the entire draft at once (data folder, Language, Refresh interval, floating ticker window opacity, Stock Fee settings, and Price Change Alert settings together). Every applied setting is persisted in browser `localStorage`.
+- **Default** resets only the in-progress draft to the built-in defaults (System Default language, 3-second refresh interval, 100% window opacity, and the default Stock Fee and Price Change Alert values below); it does **not** apply or persist anything until **Save** is subsequently clicked. It does, however, preview the default language and window opacity immediately, matching the same-field preview behavior above.
+- **Cancel** (and the dialog's close button) discards the draft, restores the previously applied language and floating ticker window opacity if either was being previewed, and closes the dialog without applying or persisting any changes; the next time Settings is opened, the draft is rebuilt from the still-current applied values.
+- Save rejects the draft when the data folder is blank or unavailable, the refresh interval is below one second, the window opacity is outside the `10`–`100` range, or a Stock Fee field is not a finite, non-negative number; no draft values are applied in that case.
 
 ### 6.1.4 Storage
 
 - The application data folder defaults to **`Documents\Little V`** for the current user.
 - The **Settings → Storage → Data folder** control accepts an absolute existing directory and provides a native **Browse** picker. The selected directory takes effect after **Save**.
-- The chosen folder contains only stock data: the stock ledger directory, **`stocks\`**, whose files are named **`<stock-code>.json`**.
+- The chosen folder contains the stock ledger directory, **`stocks\`**, whose files are named **`<stock-code>.json`**, plus the ordered ticker-watchlist file **`ticker.jsonl`**.
 - The selected data folder is persisted in browser `localStorage` as `littlev-stock-data-directory`. Language, refresh interval, and Stock Fee values use their own `localStorage` keys, so no application setting is stored with the stock data folder.
-- Choosing a different data folder switches to that folder's ledger collection. It does not move or merge data from the previous folder.
+- Choosing a different data folder switches to that folder's ledger collection and ticker watchlist. It does not move or merge data from the previous folder.
 - Little V monitors the selected `stocks\` directory. When stock JSON files are added, modified, renamed, or deleted outside the application, it automatically reloads the table from disk.
 
 ### 6.1.5 Stock Fee settings
@@ -209,7 +222,7 @@ When a single stock is selected in the Names filter, the status bar also shows, 
   - These rates are configurable in **Settings → Stock Fee** (see §6.1.5).
 - Hovering over a populated Profit cell shows the signed net-profit percentage using the same fees and stamp duty as the Profit calculation: `net_profit / (buy_price × quantity)`. Positive values are red and negative values are green.
 - An empty Buy Date or Sell Date cell has a yellow background when the matching price is present.
-- Double-clicking a row opens an **Edit transaction** dialog (see §9) pre-filled with that row's current values, allowing the quantity, buy/sell price and date fields and note to be changed and saved back to the same transaction.
+- Double-clicking a row opens an **Edit transaction** dialog (see §10) pre-filled with that row's current values, allowing the quantity, buy/sell price and date fields and note to be changed and saved back to the same transaction.
 - Each row ends with a **Delete transaction** icon button (visible on hover). Clicking it opens a confirmation dialog styled like the Create Transaction dialog, naming the affected stock; confirming permanently removes that transaction from its stock's ledger file and refreshes the table, while Cancel or closing the dialog leaves the transaction untouched. A deletion error is shown inside the confirmation dialog without closing it.
 - When no records match, show a clear empty state that directs the user to create a transaction.
 
@@ -237,7 +250,91 @@ The **Split** menu action opens a modal **Split transaction** dialog for dividin
 - Both resulting transactions keep the original transaction's date and note (not shown in the detail panel, but preserved unchanged in the ledger).
 - Clicking **Split** atomically replaces the selected transaction with the two resulting transactions (each with a new UUID and fresh creation/modification timestamps) in the stock's ledger file, and the main table refreshes. A split error (e.g. the selected transaction no longer exists) is shown inside the dialog without closing it.
 
-## 9. Create/Edit Transaction Dialog
+## 9. Stock Ticker
+
+Little V includes a lightweight stock ticker consisting of a floating ticker window and a **Ticker** dialog embedded in the main window. The ticker watchlist is independent from the transaction ledger.
+
+### 9.1 Floating ticker window
+
+- The ticker window is created when Little V starts but is initially hidden. Its last visible/hidden state is stored in WebView `localStorage` and restored on subsequent startups.
+- The ticker-visibility button at the far right of the main menu bar toggles the floating window without opening the Ticker dialog.
+- Double-clicking the floating ticker window with the primary pointer button hides it.
+- The window is frameless/borderless, always on top, and behaves as a small desktop tool window. On Windows, native topmost/tool-window behavior may be applied where required to preserve this behavior.
+- The window background is transparent outside the rendered stock text area.
+- Pointer-dragging the window surface moves the window. The final desktop position is stored in WebView `localStorage` after dragging and restored on startup.
+- Closing the main window quits Little V entirely, including the floating ticker window (if visible) — there is no way to keep the ticker running once the main window is closed.
+- The ticker displays a compact `240px`-wide grid with three fixed columns in this order: **Name** (`120px`), **Price** (`60px`), and **Percent** (`60px`). Each configured stock occupies one row.
+- Rows have a fixed height of `22px`, cells use compact `0 4px` padding, and there is no gap between grid cells.
+- Name cells are right-aligned. Price and Percent cells are centered.
+- Stock text uses normal font weight and no red/green market-change colors by default. Cells have no hover tooltip or hover visual effect.
+- If no stocks are configured, the floating window displays **No stocks configured.**
+
+### 9.2 Ticker price alarms
+
+- Each configured ticker stock has optional lower and upper price limits stored as the string fields `lower` and `upper`.
+- An empty or non-numeric limit disables that individual limit rather than producing an active alarm.
+- Alarm checks run only when live quote data is available:
+  - the lower alarm is active only when `current price < lower`;
+  - the upper alarm is active only when `current price > upper`;
+  - a price equal to a configured limit does not trigger an alarm.
+- When either alarm is active, only that stock's Name cell becomes bold. Alarm state does not add red/green coloring or change the Price or Percent cells.
+- When no current quote is available, the stock has no active alarm.
+
+### 9.3 Ticker dialog
+
+- Selecting **Ticker** from the main menu opens a modal dialog titled **Ticker** within the main window, using the same backdrop, close, Save, and Cancel interaction model as the main **Settings** dialog.
+- The dialog has a minimum width of `640px`, uses the same normal width as the Split dialog, has a maximum height of `560px` within the available main-window viewport, and contains a stock-search panel and an ordered managed-stock list.
+
+#### 9.3.1 Stock search
+
+- The search input placeholder is **Search a stock**.
+- A down-arrow button at the right edge of the search input opens an anchored pull-down list, matching the Create transaction stock combobox, and lists all stocks currently recorded in the transaction ledger without requiring an API search.
+- API search results use the same anchored pull-down list. Adding a stock keeps the list open and immediately changes that result to **Added**; clicking outside the combobox closes the list.
+- Each pull-down result uses the same full-width option-row style and `14px` bold text as the Create transaction stock list, displaying the stock name followed by its short numeric code in parentheses at the same font size; the row also shows its **Add** or **Added** state.
+- Search runs when the user clicks **Search** or presses Enter in the search input.
+- Search uses the application's existing supported-stock lookup and shows each matching stock's name, code, and an action button.
+- Unlike the Create transaction stock lookup, ticker search is not restricted to A-share stocks/ETFs/LOFs: it also returns index quotes (e.g. 上证指数), since the ticker watchlist can track any quoted instrument, not just recordable ledger transactions.
+- A result not yet in the managed list has an enabled **Add** button.
+- A result already in the managed list has a disabled **Added** button, preventing duplicate stock codes.
+- Adding a stock appends it to the managed list with empty alarm limits:
+
+```json
+{"code":"SH510300","name":"沪深300ETF","lower":"","upper":""}
+```
+
+#### 9.3.2 Managed stock list
+
+- If the managed list is empty, it displays **No stocks yet. Search above to add some.**
+- Each row contains, in order: stock name, one live-quote cell formatted as `price / change`, Lower alarm input, Upper alarm input, and row actions. The stock code is not displayed in the managed table.
+- The managed table uses the concise display name, removing `ETF` or `LOF` and any following suffix from the stored full stock name.
+- The managed stock table uses a compact `14px` font for its names, live quote values, alarm inputs, and row actions.
+- Live Price and Change values are red for a positive market change, green for a negative market change, and use the normal text color when unchanged; unavailable values display `—`.
+- Lower and Upper are text inputs with decimal input mode, right-aligned text, placeholders **Lower** and **Upper**, and a width/flex basis of `66px`.
+- Row actions are **Move up**, **Move down**, and **Delete/Remove**. Move up is disabled for the first row and Move down is disabled for the last row. Delete immediately removes the row from the in-memory managed list.
+
+#### 9.3.3 Reordering
+
+- The managed list supports both Move up/Move down actions and pointer-based drag reordering.
+- Pointer drag starts only with the primary/left mouse button on a stock row. Interacting with an alarm input or row-action button must not initiate a drag.
+- Dragging a managed row must not select its displayed text; text selection remains available inside the Lower and Upper inputs.
+- A small movement threshold prevents an ordinary click from accidentally starting a reorder.
+- The row currently being dragged is visually identified.
+- Completing a reorder updates the in-memory managed-list order immediately.
+- **Save** writes the current ordered list and alarm values to `ticker.jsonl` and closes the dialog. **Cancel** or the close button closes the dialog and discards unsaved in-memory changes.
+
+### 9.4 Ticker persistence
+
+- The ordered managed-stock list is stored in the application's configured data folder as **`ticker.jsonl`**.
+- The file uses JSON Lines format: each non-empty line is one stock object containing `code`, `name`, `lower`, and `upper`, in display order.
+- Example line:
+
+```json
+{"code":"SH510300","name":"沪深300ETF","lower":"","upper":""}
+```
+
+- Window position and visible/hidden state are UI preferences and are stored separately in WebView `localStorage`, not in `ticker.jsonl`.
+
+## 10. Create/Edit Transaction Dialog
 
 The **New** action opens a modal dialog containing:
 
@@ -259,7 +356,7 @@ The dialog provides **Cancel** and **Save** actions. Errors from validation, loc
 
 Double-clicking a table row reopens the same dialog, titled **Edit transaction**, pre-filled with that transaction's current Quantity, Buy price/date, Sell price/date, and Note. In edit mode, the Stock field is locked (shown disabled) since a transaction cannot be moved to a different stock; only Quantity, Buy price/date, Sell price/date, and Note may be changed. Saving calls the update path and writes the same transaction record (identified by its stock code and UUID) back to its ledger file, preserving its original UUID and creation timestamp while refreshing its modification timestamp; Cancel or closing the dialog discards any changes.
 
-## 10. Acceptance Criteria
+## 11. Acceptance Criteria
 
 1. A user can save a transaction with only a buy price and date and see it as an open buy row in the table.
 2. A user can save a transaction with only a sell price and date and see it as an open sell row in the table.
@@ -277,3 +374,9 @@ Double-clicking a table row reopens the same dialog, titled **Edit transaction**
 14. The Split transaction dialog always shows the transactions table and split detail panel, even before a stock is selected; selecting a stock with no valid open transactions additionally shows an empty-state message below the table.
 15. Selecting a transaction to split defaults Transaction 1's quantity to half of the original quantity (rounded to the nearest multiple of 100) and its price to the original price; Transaction 2's quantity and price update automatically to conserve the total value as Transaction 1's quantity or price are edited.
 16. The **Split** button stays disabled until a transaction is selected and both quantities are positive multiples of 100 that add up to the original quantity with a positive Transaction 1 price; clicking **Split** replaces the selected transaction with the two resulting transactions (sharing the original date and note) and refreshes the table.
+17. Little V creates the frameless, transparent, always-on-top ticker window at startup, restores its saved position and visibility, allows the menu-bar ticker button to show or hide it, and hides it when the floating window is double-clicked.
+18. The ticker grid renders configured stocks in saved order as fixed-height `Name | Price | Percent` rows with the specified alignment and compact spacing, no market-change colors or hover effects, and the defined empty-state message when no stocks exist.
+19. A ticker stock's Name cell becomes bold only when a live price is strictly below its valid Lower limit or strictly above its valid Upper limit; empty, invalid, equal, or unavailable-price cases do not activate an alarm.
+20. The **Ticker** menu entry opens an embedded dialog titled **Ticker**, using the same width as the Split dialog and a height up to `560px` within the main-window viewport, where supported stocks can be searched or listed from the transaction ledger through the search field's down arrow and added once, with existing results shown as **Added**.
+21. The Ticker dialog supports editing Lower/Upper limit strings, deleting stocks, and reordering stocks through both Move up/Move down actions and guarded pointer drag behavior.
+22. The ordered ticker list and alarm values persist as JSON Lines in `<data-folder>\ticker.jsonl`, while ticker position and visibility persist separately in WebView `localStorage`.

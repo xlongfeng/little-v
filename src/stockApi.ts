@@ -29,6 +29,21 @@ export async function searchStocks(query: string): Promise<StockOption[]> {
     }));
 }
 
+// Unlike searchStocks, this is not restricted to A-share stocks/ETFs/LOFs: it
+// also returns index quotes (e.g. SH000001 上证指数) so the ticker watchlist
+// can track indices, which are not valid ledger transaction stocks.
+export async function searchAnyStocks(query: string): Promise<StockOption[]> {
+  if (!query.trim()) {
+    return [];
+  }
+
+  const results = await stocks.auto.searchStocks(query.trim());
+  return results.map((stock) => ({
+    code: stock.code,
+    name: stock.name,
+  }));
+}
+
 export interface StockQuote {
   code: string;
   now: number;

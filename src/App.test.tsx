@@ -55,6 +55,9 @@ describe("App", () => {
       if (command === "load_stock_ledgers") {
         return Promise.resolve(ledgers);
       }
+      if (command === "load_ticker_stocks") {
+        return Promise.resolve([]);
+      }
       if (command === "get_data_directory" || command === "get_default_data_directory") {
         return Promise.resolve("C:\\Users\\Example\\Documents\\Little V");
       }
@@ -77,6 +80,27 @@ describe("App", () => {
     expect(versionTag).toHaveClass("version-tag");
     expect(within(dialog).getByRole("heading")).toHaveTextContent(/^About Little V Version \d+\.\d+\.\d+$/);
     expect(within(dialog).getByText("A local stock transaction ledger.")).toBeInTheDocument();
+  });
+
+  it("opens the embedded Ticker dialog and toggles the ticker window from the far-right menu button", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Ticker" }));
+    expect(screen.getByRole("dialog", { name: "Ticker" })).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith("load_ticker_stocks");
+    expect(invoke).not.toHaveBeenCalledWith("open_ticker_settings");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Ticker" })).not.toBeInTheDocument();
+
+    invoke.mockResolvedValueOnce(true);
+    const toggle = screen.getByRole("button", { name: "Show ticker" });
+    await user.click(toggle);
+
+    expect(invoke).toHaveBeenCalledWith("toggle_ticker_visibility");
+    expect(window.localStorage.getItem("littlev-ticker-visible")).toBe("true");
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
   });
 
   it("defaults to Chinese when the OS/browser language is Chinese", async () => {
@@ -904,6 +928,7 @@ describe("App", () => {
     await screen.findByText("Example Bank", { selector: ".stock-name" });
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("tab", { name: "Price Change Alert" }));
     expect(screen.getByLabelText("Gain (%)")).toHaveValue(3);
     expect(screen.getByLabelText("Loss (%)")).toHaveValue(3);
     await user.clear(screen.getByLabelText("Gain (%)"));
@@ -1160,6 +1185,7 @@ describe("App", () => {
     expect(within(statusBar).getByTitle("Total profit")).toHaveTextContent("39.85");
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("tab", { name: "Stock Fee" }));
     const feeRateInput = screen.getByLabelText("Trade fee rate (%)");
     await user.clear(feeRateInput);
     await user.type(feeRateInput, "5");
@@ -1189,6 +1215,49 @@ describe("App", () => {
     expect(window.localStorage.getItem("littlev-stock-data-directory")).toBe("C:\\Stock Data");
   });
 
+  it("adjusts and applies the floating ticker window opacity from Settings", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("littlev-ticker-opacity", "80");
+    render(<App />);
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("tab", { name: "Ticker" }));
+    const slider = screen.getByRole("slider", { name: "Window opacity (%)" });
+    expect(slider).toHaveValue("80");
+
+    fireEvent.change(slider, { target: { value: "50" } });
+
+    // Dragging the slider previews the opacity live, before Save is clicked.
+    expect(invoke).toHaveBeenCalledWith("set_ticker_opacity", { opacity: 50 });
+    expect(window.localStorage.getItem("littlev-ticker-opacity")).toBe("80");
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("set_ticker_opacity", { opacity: 50 }),
+    );
+    expect(window.localStorage.getItem("littlev-ticker-opacity")).toBe("50");
+  });
+
+  it("reverts the floating ticker window opacity preview when Settings is cancelled", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("littlev-ticker-opacity", "80");
+    render(<App />);
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("tab", { name: "Ticker" }));
+    const slider = screen.getByRole("slider", { name: "Window opacity (%)" });
+    fireEvent.change(slider, { target: { value: "30" } });
+    expect(invoke).toHaveBeenCalledWith("set_ticker_opacity", { opacity: 30 });
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(invoke).toHaveBeenCalledWith("set_ticker_opacity", { opacity: 80 });
+    expect(window.localStorage.getItem("littlev-ticker-opacity")).toBe("80");
+  });
+
   it("reloads ledger data when the backend reports an external stock-file change", async () => {
     let notifyLedgerChange: (() => void) | undefined;
     let ledgers = [
@@ -1214,8 +1283,10 @@ describe("App", () => {
       }
       return Promise.resolve(undefined);
     });
-    listen.mockImplementation((_event, handler) => {
-      notifyLedgerChange = handler as () => void;
+    listen.mockImplementation((event, handler) => {
+      if (event === "stock-ledgers-changed") {
+        notifyLedgerChange = handler as () => void;
+      }
       return Promise.resolve(vi.fn());
     });
 

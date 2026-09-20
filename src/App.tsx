@@ -5,6 +5,8 @@ import { FormEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useS
 import {
   computeNetProfit,
   DEFAULT_PROFIT_SETTINGS,
+  displayStockCode,
+  displayStockName,
   pricePrecision,
   toTableRows,
   type ProfitSettings,
@@ -18,6 +20,12 @@ import { formatRecordCount, isLanguagePreference, useLanguage, type LanguageCont
 import { LanguageProvider } from "./LanguageProvider";
 import { DEFAULT_REFRESH_SECONDS, MIN_REFRESH_SECONDS, PriceFeedProvider, usePriceFeed } from "./PriceFeedProvider";
 import { ProfitSettingsProvider, useProfitSettings } from "./ProfitSettingsProvider";
+import {
+  DEFAULT_TICKER_OPACITY,
+  readStoredTickerOpacity,
+  TickerSettingsDialog,
+  TICKER_OPACITY_STORAGE_KEY,
+} from "./Ticker";
 import "./App.css";
 
 type StatusFilter = "all" | "alerted" | "open" | "closed";
@@ -186,6 +194,8 @@ const DOWN_STEPS = Array.from({ length: 10 }, (_, index) => -(index + 1));
 const HOVER_POPUP_DELAY_MS = 500;
 const DATA_DIRECTORY_STORAGE_KEY = "littlev-stock-data-directory";
 const PRICE_ALERT_SETTINGS_STORAGE_KEY = "littlev-price-alert-settings";
+const TICKER_VISIBLE_STORAGE_KEY = "littlev-ticker-visible";
+const TICKER_VISIBILITY_CHANGED_EVENT = "ticker-visibility-changed";
 const DEFAULT_PRICE_ALERT_PERCENT = 3;
 
 interface PriceAlertSettings {
@@ -243,14 +253,6 @@ function signedChangeClass(value: number): string {
     return "price-loss";
   }
   return "";
-}
-
-function displayStockName(name: string): string {
-  return name.replace(/(?:ETF|LOF).*$/i, "").trimEnd();
-}
-
-function displayStockCode(code: string): string {
-  return code.replace(/^[A-Za-z]+/, "");
 }
 
 function referenceChange(quote: StockQuote, referencePrice: number, isSellPrice: boolean): number {
@@ -646,10 +648,13 @@ function formFromRow(row: TableRow): TransactionForm {
   };
 }
 
+type SettingsTab = "general" | "ticker" | "fees" | "alerts";
+
 interface SettingsDraft {
   dataDirectory: string;
   languagePreference: string;
   refreshIntervalSeconds: string;
+  tickerOpacityPercent: string;
   feeRatePercent: string;
   minFee: string;
   stampDutyRatePercent: string;
@@ -661,6 +666,7 @@ function draftFromSettings(
   dataDirectory: string,
   languagePreference: string,
   refreshIntervalSeconds: number,
+  tickerOpacityPercent: number,
   profitSettings: ProfitSettings,
   priceAlertSettings: PriceAlertSettings,
 ): SettingsDraft {
@@ -668,6 +674,7 @@ function draftFromSettings(
     dataDirectory,
     languagePreference,
     refreshIntervalSeconds: String(refreshIntervalSeconds),
+    tickerOpacityPercent: String(tickerOpacityPercent),
     feeRatePercent: String(profitSettings.feeRate * 100),
     minFee: String(profitSettings.minFee),
     stampDutyRatePercent: String(profitSettings.stampDutyRate * 100),
@@ -708,11 +715,16 @@ function AppContent() {
   const [editingRow, setEditingRow] = useState<TableRow | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
+  const [tickerVisible, setTickerVisible] = useState(
+    () => window.localStorage.getItem(TICKER_VISIBLE_STORAGE_KEY) === "true",
+  );
+  const [tickerSettingsOpen, setTickerSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [dataDirectory, setDataDirectory] = useState("");
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() =>
-    draftFromSettings("", languagePreference, refreshIntervalSeconds, profitSettings, priceAlertSettings),
+    draftFromSettings("", languagePreference, refreshIntervalSeconds, readStoredTickerOpacity(), profitSettings, priceAlertSettings),
   );
   const [settingsError, setSettingsError] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
@@ -721,11 +733,33 @@ function AppContent() {
   const [pendingDelete, setPendingDelete] = useState<{ code: string; uuid: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<boolean>(TICKER_VISIBILITY_CHANGED_EVENT, (event) => {
+      setTickerVisible(event.payload);
+      window.localStorage.setItem(TICKER_VISIBLE_STORAGE_KEY, String(event.payload));
+    }).then((stop) => {
+      unlisten = stop;
+    });
+    return () => unlisten?.();
+  }, []);
+
+  async function toggleTicker() {
+    const visible = await invoke<boolean>("toggle_ticker_visibility");
+    setTickerVisible(visible);
+    window.localStorage.setItem(TICKER_VISIBLE_STORAGE_KEY, String(visible));
+  }
+
   function openSettings() {
     clearLanguagePreview();
     setSettingsError("");
-    setSettingsDraft(draftFromSettings(dataDirectory, languagePreference, refreshIntervalSeconds, profitSettings, priceAlertSettings));
+    setSettingsDraft(draftFromSettings(dataDirectory, languagePreference, refreshIntervalSeconds, readStoredTickerOpacity(), profitSettings, priceAlertSettings));
+    setSettingsTab("general");
     setSettingsOpen(true);
+  }
+
+  function previewTickerOpacity(percent: number) {
+    void invoke("set_ticker_opacity", { opacity: percent });
   }
 
   async function resetSettingsDraftToDefault() {
@@ -735,6 +769,7 @@ function AppContent() {
         defaultDataDirectory,
         "system",
         DEFAULT_REFRESH_SECONDS,
+        DEFAULT_TICKER_OPACITY,
         DEFAULT_PROFIT_SETTINGS,
         { gainPercent: DEFAULT_PRICE_ALERT_PERCENT, lossPercent: DEFAULT_PRICE_ALERT_PERCENT },
       ));
@@ -743,16 +778,19 @@ function AppContent() {
       setSettingsError(String(error));
     }
     previewLanguagePreference("system");
+    previewTickerOpacity(DEFAULT_TICKER_OPACITY);
   }
 
   function dismissSettings() {
     clearLanguagePreview();
+    previewTickerOpacity(readStoredTickerOpacity());
     setSettingsError("");
     setSettingsOpen(false);
   }
 
   async function saveSettings() {
     const refreshSeconds = Number(settingsDraft.refreshIntervalSeconds);
+    const tickerOpacityPercent = Number(settingsDraft.tickerOpacityPercent);
     const feeRatePercent = Number(settingsDraft.feeRatePercent);
     const minFee = Number(settingsDraft.minFee);
     const stampDutyRatePercent = Number(settingsDraft.stampDutyRatePercent);
@@ -763,6 +801,9 @@ function AppContent() {
       !settingsDraft.dataDirectory.trim() ||
       !Number.isFinite(refreshSeconds) ||
       refreshSeconds < MIN_REFRESH_SECONDS ||
+      !Number.isFinite(tickerOpacityPercent) ||
+      tickerOpacityPercent < 10 ||
+      tickerOpacityPercent > 100 ||
       ![feeRatePercent, minFee, stampDutyRatePercent, alertGainPercent, alertLossPercent]
         .every((value) => Number.isFinite(value) && value >= 0)
     ) {
@@ -779,6 +820,9 @@ function AppContent() {
       setDataDirectory(selectedDirectory);
       setLanguagePreference(settingsDraft.languagePreference as LanguagePreference);
       setRefreshIntervalSeconds(Math.round(refreshSeconds));
+      const roundedTickerOpacity = Math.round(tickerOpacityPercent);
+      window.localStorage.setItem(TICKER_OPACITY_STORAGE_KEY, String(roundedTickerOpacity));
+      await invoke("set_ticker_opacity", { opacity: roundedTickerOpacity });
       setProfitSettings({
         feeRate: feeRatePercent / 100,
         minFee,
@@ -880,8 +924,37 @@ function AppContent() {
 
   useEffect(() => {
     // Poll every code present in the ledger, regardless of active filters.
-    setCodes([...new Set(allRows.map((row) => row.code))]);
+    setCodes("ledger", [...new Set(allRows.map((row) => row.code))]);
   }, [allRows, setCodes]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let stopListening: (() => void) | undefined;
+    async function loadTickerCodes() {
+      try {
+        const stocks = await invoke<Array<{ code: string }>>("load_ticker_stocks");
+        if (!Array.isArray(stocks)) {
+          throw new Error("Could not load ticker stocks.");
+        }
+        if (!cancelled) {
+          setCodes("ticker-watchlist", stocks.map((stock) => stock.code));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setLoadError(String(error));
+        }
+      }
+    }
+    void loadTickerCodes();
+    void listen("ticker-stocks-changed", () => void loadTickerCodes()).then((stop) => {
+      stopListening = stop;
+    });
+    return () => {
+      cancelled = true;
+      stopListening?.();
+      setCodes("ticker-watchlist", []);
+    };
+  }, [setCodes]);
 
   const filterNames = useMemo(
     () => [...new Set(allRows.map((row) => row.name))].sort((left, right) => left.localeCompare(right)),
@@ -1031,9 +1104,20 @@ function AppContent() {
           <button type="button" onClick={() => setDialogOpen(true)}>{t("menu.create")}</button>
           <button type="button" onClick={() => setMergeOpen(true)}>{t("menu.merge")}</button>
           <button type="button" onClick={() => setSplitOpen(true)}>{t("menu.split")}</button>
+          <button type="button" onClick={() => setTickerSettingsOpen(true)}>{t("menu.ticker")}</button>
           <button type="button" onClick={openSettings}>{t("menu.settings")}</button>
           <button type="button" onClick={() => setAboutOpen(true)}>{t("menu.about")}</button>
         </nav>
+        <button
+          type="button"
+          className={`ticker-toggle${tickerVisible ? " active" : ""}`}
+          aria-pressed={tickerVisible}
+          title={tickerVisible ? t("ticker.hide") : t("ticker.show")}
+          aria-label={tickerVisible ? t("ticker.hide") : t("ticker.show")}
+          onClick={() => void toggleTicker()}
+        >
+          ▦
+        </button>
       </header>
 
       <section className="filter-bar" aria-label={t("table.recordControls")}>
@@ -1250,18 +1334,58 @@ function AppContent() {
           <p>{t("about.description")}</p>
         </InfoDialog>
       )}
+      {tickerSettingsOpen && (
+        <TickerSettingsDialog onClose={() => setTickerSettingsOpen(false)} />
+      )}
       {settingsOpen && (
         <div className="dialog-backdrop" role="presentation">
-          <section className="dialog info-dialog" role="dialog" aria-label={t("settings.title")}>
+          <section className="dialog info-dialog settings-dialog" role="dialog" aria-label={t("settings.title")}>
             <div className="dialog-heading">
               <h2>{t("settings.title")}</h2>
               <button type="button" className="icon-button" onClick={dismissSettings} aria-label={t("dialog.close")}>
                 ×
               </button>
             </div>
-            <fieldset className="settings-group">
-              <legend>{t("settings.general")}</legend>
-              <div className="settings-grid">
+            <div className="settings-tabs" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={settingsTab === "general"}
+                className={settingsTab === "general" ? "active" : undefined}
+                onClick={() => setSettingsTab("general")}
+              >
+                {t("settings.general")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={settingsTab === "ticker"}
+                className={settingsTab === "ticker" ? "active" : undefined}
+                onClick={() => setSettingsTab("ticker")}
+              >
+                {t("ticker.settingsTitle")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={settingsTab === "fees"}
+                className={settingsTab === "fees" ? "active" : undefined}
+                onClick={() => setSettingsTab("fees")}
+              >
+                {t("settings.stockProfit")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={settingsTab === "alerts"}
+                className={settingsTab === "alerts" ? "active" : undefined}
+                onClick={() => setSettingsTab("alerts")}
+              >
+                {t("settings.priceChangeAlert")}
+              </button>
+            </div>
+            {settingsTab === "general" && (
+              <div className="settings-grid" role="tabpanel">
                 <label htmlFor="settings-language">{t("settings.language")}</label>
                 <select
                   id="settings-language"
@@ -1295,10 +1419,9 @@ function AppContent() {
                   </button>
                 </div>
               </div>
-            </fieldset>
-            <fieldset className="settings-group">
-              <legend>{t("settings.prices")}</legend>
-              <div className="settings-grid">
+            )}
+            {settingsTab === "ticker" && (
+              <div className="settings-grid" role="tabpanel">
                 <label htmlFor="settings-refresh-interval">{t("settings.refreshInterval")}</label>
                 <input
                   id="settings-refresh-interval"
@@ -1311,11 +1434,31 @@ function AppContent() {
                     setSettingsDraft((draft) => ({ ...draft, refreshIntervalSeconds: event.target.value }))
                   }
                 />
+                <label htmlFor="settings-ticker-opacity">{t("ticker.opacity")}</label>
+                <div className="ticker-opacity-input">
+                  <input
+                    id="settings-ticker-opacity"
+                    type="range"
+                    min={10}
+                    max={100}
+                    step={5}
+                    aria-label={t("ticker.opacity")}
+                    value={settingsDraft.tickerOpacityPercent}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setSettingsDraft((draft) => ({ ...draft, tickerOpacityPercent: value }));
+                      const percent = Number(value);
+                      if (Number.isFinite(percent)) {
+                        previewTickerOpacity(percent);
+                      }
+                    }}
+                  />
+                  <span>{settingsDraft.tickerOpacityPercent}%</span>
+                </div>
               </div>
-            </fieldset>
-            <fieldset className="settings-group">
-              <legend>{t("settings.stockProfit")}</legend>
-              <div className="settings-grid">
+            )}
+            {settingsTab === "fees" && (
+              <div className="settings-grid" role="tabpanel">
                 <label htmlFor="settings-stamp-duty-rate">{t("settings.stampDutyRate")}</label>
                 <input
                   id="settings-stamp-duty-rate"
@@ -1349,10 +1492,9 @@ function AppContent() {
                   onChange={(event) => setSettingsDraft((draft) => ({ ...draft, minFee: event.target.value }))}
                 />
               </div>
-            </fieldset>
-            <fieldset className="settings-group">
-              <legend>{t("settings.priceChangeAlert")}</legend>
-              <div className="settings-grid">
+            )}
+            {settingsTab === "alerts" && (
+              <div className="settings-grid" role="tabpanel">
                 <label htmlFor="settings-alert-gain">{t("settings.alertGain")}</label>
                 <input
                   id="settings-alert-gain"
@@ -1374,7 +1516,7 @@ function AppContent() {
                   onChange={(event) => setSettingsDraft((draft) => ({ ...draft, alertLossPercent: event.target.value }))}
                 />
               </div>
-            </fieldset>
+            )}
             {settingsError && <p className="field-error" role="alert">{settingsError}</p>}
             <div className="dialog-actions settings-actions">
               <button type="button" className="settings-default-button" onClick={() => void resetSettingsDraftToDefault()} disabled={savingSettings}>

@@ -1,7 +1,10 @@
-import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { fetchQuotes, type StockQuote } from "./stockApi";
 
 const REFRESH_STORAGE_KEY = "littlev-price-refresh-seconds";
+const STOCK_QUOTES_UPDATED_EVENT = "stock-quotes-updated";
 export const DEFAULT_REFRESH_SECONDS = 3;
 export const MIN_REFRESH_SECONDS = 1;
 
@@ -15,17 +18,22 @@ interface PriceFeedContextValue {
   quotes: Record<string, StockQuote>;
   refreshIntervalSeconds: number;
   setRefreshIntervalSeconds: (seconds: number) => void;
-  setCodes: (codes: string[]) => void;
+  setCodes: (source: string, codes: string[]) => void;
 }
 
 const PriceFeedContext = createContext<PriceFeedContextValue | null>(null);
 
-export function PriceFeedProvider({ children }: { children: ReactNode }) {
+export function PriceFeedProvider({ children, coordinator = true }: { children: ReactNode; coordinator?: boolean }) {
   const [quotes, setQuotes] = useState<Record<string, StockQuote>>({});
   const [refreshIntervalSeconds, setRefreshIntervalSecondsState] = useState<number>(loadStoredRefreshSeconds);
-  const [codes, setCodes] = useState<string[]>([]);
+  const [codeSources, setCodeSources] = useState<Record<string, string[]>>({});
+  const codes = useMemo(() => [...new Set(Object.values(codeSources).flat())], [codeSources]);
   const codesRef = useRef<string[]>([]);
   codesRef.current = codes;
+
+  const setCodes = useCallback((source: string, nextCodes: string[]) => {
+    setCodeSources((current) => ({ ...current, [source]: nextCodes }));
+  }, []);
 
   function setRefreshIntervalSeconds(seconds: number) {
     const clamped = Number.isFinite(seconds) && seconds >= MIN_REFRESH_SECONDS ? seconds : DEFAULT_REFRESH_SECONDS;
@@ -34,6 +42,26 @@ export function PriceFeedProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    let stopListening: (() => void) | undefined;
+    void invoke<Record<string, StockQuote>>("get_cached_stock_quotes")
+      .then((cached) => {
+        if (cached && typeof cached === "object" && !Array.isArray(cached)) {
+          setQuotes(cached);
+        }
+      })
+      .catch(() => undefined);
+    void listen<Record<string, StockQuote>>(STOCK_QUOTES_UPDATED_EVENT, (event) => {
+      setQuotes(event.payload);
+    }).then((stop) => {
+      stopListening = stop;
+    });
+    return () => stopListening?.();
+  }, []);
+
+  useEffect(() => {
+    if (!coordinator) {
+      return;
+    }
     let cancelled = false;
     let timer: number | null = null;
 
@@ -44,15 +72,12 @@ export function PriceFeedProvider({ children }: { children: ReactNode }) {
     }
 
     async function poll() {
-      // Skip the network call while the window is not visible (e.g.
-      // minimized or on another virtual desktop), but keep the loop
-      // running so it resumes on its own schedule if visibility isn't
-      // restored through the event listener below.
-      if (codesRef.current.length && !document.hidden) {
+      if (codesRef.current.length) {
         try {
           const latest = await fetchQuotes(codesRef.current);
           if (!cancelled) {
             setQuotes((previous) => ({ ...previous, ...latest }));
+            await invoke("cache_stock_quotes", { quotes: latest });
           }
         } catch {
           // Ignore transient failures; keep showing the last known quotes.
@@ -61,27 +86,14 @@ export function PriceFeedProvider({ children }: { children: ReactNode }) {
       scheduleNext();
     }
 
-    function handleVisibilityChange() {
-      if (!document.hidden) {
-        // Refresh immediately once the window becomes visible again
-        // instead of waiting out the remainder of the interval.
-        if (timer != null) {
-          window.clearTimeout(timer);
-        }
-        void poll();
-      }
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
     void poll();
     return () => {
       cancelled = true;
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (timer != null) {
         window.clearTimeout(timer);
       }
     };
-  }, [refreshIntervalSeconds, codes]);
+  }, [coordinator, refreshIntervalSeconds, codes]);
 
   const value = useMemo<PriceFeedContextValue>(
     () => ({ quotes, refreshIntervalSeconds, setRefreshIntervalSeconds, setCodes }),

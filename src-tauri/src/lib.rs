@@ -2,6 +2,7 @@ use chrono::Utc;
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     sync::{
@@ -12,10 +13,18 @@ use std::{
     thread,
     time::Duration,
 };
-use tauri::{Emitter, Manager, State};
+use tauri::{
+    Emitter, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+};
 use uuid::Uuid;
 
 const STOCK_LEDGERS_CHANGED_EVENT: &str = "stock-ledgers-changed";
+const TICKER_STOCKS_CHANGED_EVENT: &str = "ticker-stocks-changed";
+const TICKER_POSITION_CHANGED_EVENT: &str = "ticker-position-changed";
+const TICKER_VISIBILITY_CHANGED_EVENT: &str = "ticker-visibility-changed";
+const TICKER_OPACITY_CHANGED_EVENT: &str = "ticker-opacity-changed";
+const STOCK_QUOTES_UPDATED_EVENT: &str = "stock-quotes-updated";
+const TICKER_WINDOW_LABEL: &str = "ticker";
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +46,17 @@ pub struct StockLedger {
     pub name: String,
     pub transactions: Vec<Transaction>,
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StockQuote {
+    pub code: String,
+    pub now: f64,
+    pub yesterday: f64,
+    pub percent: f64,
+}
+
+struct QuoteCacheState(Mutex<HashMap<String, StockQuote>>);
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -88,6 +108,21 @@ pub struct SplitTransactionRequest {
     pub right_price: Option<f64>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct TickerStock {
+    pub code: String,
+    pub name: String,
+    pub lower: String,
+    pub upper: String,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TickerPosition {
+    x: i32,
+    y: i32,
+}
+
 struct StorageInner {
     root: PathBuf,
     _watcher: RecommendedWatcher,
@@ -108,6 +143,10 @@ impl StorageState {
 
 fn ledger_directory(storage_root: &Path) -> PathBuf {
     storage_root.join("stocks")
+}
+
+fn ticker_path(storage_root: &Path) -> PathBuf {
+    storage_root.join("ticker.jsonl")
 }
 
 fn stock_path(storage_root: &Path, code: &str) -> Result<PathBuf, String> {
@@ -131,6 +170,73 @@ fn write_json_file(path: &Path, value: &impl Serialize) -> Result<(), String> {
     fs::write(&temporary_path, serialized)
         .map_err(|error| format!("Could not stage {}: {error}", path.display()))?;
     fs::rename(&temporary_path, path)
+        .map_err(|error| format!("Could not save {}: {error}", path.display()))
+}
+
+fn load_ticker_stocks_from(storage_root: &Path) -> Result<Vec<TickerStock>, String> {
+    let path = ticker_path(storage_root);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let content = fs::read_to_string(&path)
+        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
+    content
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| !line.trim().is_empty())
+        .map(|(index, line)| {
+            serde_json::from_str(line).map_err(|error| {
+                format!(
+                    "Could not parse {} line {}: {error}",
+                    path.display(),
+                    index + 1
+                )
+            })
+        })
+        .collect()
+}
+
+fn validate_ticker_stocks(stocks: &[TickerStock]) -> Result<(), String> {
+    let mut codes = std::collections::HashSet::new();
+    for stock in stocks {
+        let code = stock.code.trim().to_uppercase();
+        if code.is_empty() || stock.name.trim().is_empty() {
+            return Err("Ticker stocks require both a code and a name.".into());
+        }
+        if !code
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric())
+        {
+            return Err("Ticker stock codes may contain only letters and numbers.".into());
+        }
+        if !codes.insert(code) {
+            return Err("The ticker stock list cannot contain duplicate codes.".into());
+        }
+    }
+    Ok(())
+}
+
+fn save_ticker_stocks_to(storage_root: &Path, stocks: &[TickerStock]) -> Result<(), String> {
+    validate_ticker_stocks(stocks)?;
+    let path = ticker_path(storage_root);
+    let temporary_path = path.with_extension("jsonl.tmp");
+    let mut content = String::new();
+    for stock in stocks {
+        let normalized = TickerStock {
+            code: stock.code.trim().to_uppercase(),
+            name: stock.name.trim().to_string(),
+            lower: stock.lower.trim().to_string(),
+            upper: stock.upper.trim().to_string(),
+        };
+        content.push_str(
+            &serde_json::to_string(&normalized)
+                .map_err(|error| format!("Could not serialize {}: {error}", path.display()))?,
+        );
+        content.push('\n');
+    }
+    fs::write(&temporary_path, content)
+        .map_err(|error| format!("Could not stage {}: {error}", path.display()))?;
+    fs::rename(&temporary_path, &path)
         .map_err(|error| format!("Could not save {}: {error}", path.display()))
 }
 
@@ -665,6 +771,9 @@ fn set_data_directory(
     if let Err(error) = app.emit(STOCK_LEDGERS_CHANGED_EVENT, ()) {
         eprintln!("Could not notify the application of the data directory change: {error}");
     }
+    if let Err(error) = app.emit(TICKER_STOCKS_CHANGED_EVENT, ()) {
+        eprintln!("Could not notify the ticker of the data directory change: {error}");
+    }
 
     root.into_os_string().into_string().map_err(|path| {
         format!(
@@ -725,6 +834,123 @@ fn split_transaction(
     let inner = state.lock()?;
     let (left, right) = split_transaction_in(&inner.root, request)?;
     Ok(vec![left, right])
+}
+
+#[tauri::command]
+fn load_ticker_stocks(state: State<'_, StorageState>) -> Result<Vec<TickerStock>, String> {
+    let inner = state.lock()?;
+    load_ticker_stocks_from(&inner.root)
+}
+
+#[tauri::command]
+fn save_ticker_stocks(
+    app: tauri::AppHandle,
+    state: State<'_, StorageState>,
+    stocks: Vec<TickerStock>,
+) -> Result<(), String> {
+    let inner = state.lock()?;
+    save_ticker_stocks_to(&inner.root, &stocks)?;
+    app.emit(TICKER_STOCKS_CHANGED_EVENT, ())
+        .map_err(|error| format!("Could not notify ticker windows: {error}"))
+}
+
+#[tauri::command]
+fn set_ticker_visibility(app: tauri::AppHandle, visible: bool) -> Result<bool, String> {
+    let window = app
+        .get_webview_window(TICKER_WINDOW_LABEL)
+        .ok_or_else(|| "Ticker window is unavailable.".to_string())?;
+    if visible {
+        window
+            .show()
+            .map_err(|error| format!("Could not show ticker window: {error}"))?;
+    } else {
+        window
+            .hide()
+            .map_err(|error| format!("Could not hide ticker window: {error}"))?;
+    }
+    app.emit(TICKER_VISIBILITY_CHANGED_EVENT, visible)
+        .map_err(|error| format!("Could not notify ticker visibility: {error}"))?;
+    Ok(visible)
+}
+
+#[tauri::command]
+fn toggle_ticker_visibility(app: tauri::AppHandle) -> Result<bool, String> {
+    let window = app
+        .get_webview_window(TICKER_WINDOW_LABEL)
+        .ok_or_else(|| "Ticker window is unavailable.".to_string())?;
+    let visible = !window
+        .is_visible()
+        .map_err(|error| format!("Could not read ticker visibility: {error}"))?;
+    set_ticker_visibility(app, visible)
+}
+
+#[tauri::command]
+fn set_ticker_position(app: tauri::AppHandle, x: i32, y: i32) -> Result<(), String> {
+    let window = app
+        .get_webview_window(TICKER_WINDOW_LABEL)
+        .ok_or_else(|| "Ticker window is unavailable.".to_string())?;
+    window
+        .set_position(PhysicalPosition::new(x, y))
+        .map_err(|error| format!("Could not position ticker window: {error}"))
+}
+
+#[tauri::command]
+fn start_ticker_dragging(app: tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window(TICKER_WINDOW_LABEL)
+        .ok_or_else(|| "Ticker window is unavailable.".to_string())?;
+    window
+        .start_dragging()
+        .map_err(|error| format!("Could not drag ticker window: {error}"))
+}
+
+#[tauri::command]
+fn resize_ticker_window(app: tauri::AppHandle, width: f64, height: f64) -> Result<(), String> {
+    let window = app
+        .get_webview_window(TICKER_WINDOW_LABEL)
+        .ok_or_else(|| "Ticker window is unavailable.".to_string())?;
+    window
+        .set_size(tauri::LogicalSize::new(
+            width.clamp(180.0, 1000.0),
+            height.clamp(25.0, 1200.0),
+        ))
+        .map_err(|error| format!("Could not resize ticker window: {error}"))
+}
+
+#[tauri::command]
+fn set_ticker_opacity(app: tauri::AppHandle, opacity: f64) -> Result<(), String> {
+    let clamped = opacity.clamp(10.0, 100.0);
+    app.emit(TICKER_OPACITY_CHANGED_EVENT, clamped)
+        .map_err(|error| format!("Could not notify ticker opacity: {error}"))
+}
+
+#[tauri::command]
+fn get_cached_stock_quotes(
+    state: State<'_, QuoteCacheState>,
+) -> Result<HashMap<String, StockQuote>, String> {
+    state
+        .0
+        .lock()
+        .map(|cache| cache.clone())
+        .map_err(|_| "Could not access the stock quote cache.".to_string())
+}
+
+#[tauri::command]
+fn cache_stock_quotes(
+    app: tauri::AppHandle,
+    state: State<'_, QuoteCacheState>,
+    quotes: HashMap<String, StockQuote>,
+) -> Result<(), String> {
+    let cached = {
+        let mut cache = state
+            .0
+            .lock()
+            .map_err(|_| "Could not access the stock quote cache.".to_string())?;
+        cache.extend(quotes);
+        cache.clone()
+    };
+    app.emit(STOCK_QUOTES_UPDATED_EVENT, cached)
+        .map_err(|error| format!("Could not publish stock quotes: {error}"))
 }
 
 #[cfg(test)]
@@ -1329,6 +1555,65 @@ mod tests {
         );
         assert!(result.unwrap_err().contains("not found"));
     }
+
+    #[test]
+    fn saves_and_loads_ticker_stocks_as_json_lines_in_order() {
+        let directory = tempdir().unwrap();
+        let stocks = vec![
+            TickerStock {
+                code: "SH510300".into(),
+                name: "沪深300ETF".into(),
+                lower: "3.75".into(),
+                upper: "4.25".into(),
+            },
+            TickerStock {
+                code: "SZ000001".into(),
+                name: "Example Bank".into(),
+                lower: "".into(),
+                upper: "12".into(),
+            },
+        ];
+
+        save_ticker_stocks_to(directory.path(), &stocks).unwrap();
+
+        assert_eq!(load_ticker_stocks_from(directory.path()).unwrap(), stocks);
+        let content = fs::read_to_string(directory.path().join("ticker.jsonl")).unwrap();
+        assert_eq!(content.lines().count(), 2);
+        assert!(content.lines().next().unwrap().contains("\"code\":\"SH510300\""));
+
+        let updated = vec![TickerStock {
+            code: "SZ000001".into(),
+            name: "Example Bank".into(),
+            lower: "7.5".into(),
+            upper: "12".into(),
+        }];
+        save_ticker_stocks_to(directory.path(), &updated).unwrap();
+        assert_eq!(load_ticker_stocks_from(directory.path()).unwrap(), updated);
+    }
+
+    #[test]
+    fn rejects_duplicate_ticker_stock_codes_case_insensitively() {
+        let directory = tempdir().unwrap();
+        let result = save_ticker_stocks_to(
+            directory.path(),
+            &[
+                TickerStock {
+                    code: "SH600000".into(),
+                    name: "First".into(),
+                    lower: "".into(),
+                    upper: "".into(),
+                },
+                TickerStock {
+                    code: "sh600000".into(),
+                    name: "Second".into(),
+                    lower: "".into(),
+                    upper: "".into(),
+                },
+            ],
+        );
+
+        assert!(result.unwrap_err().contains("duplicate"));
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1338,6 +1623,43 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_handle = app.handle().clone();
+            let ticker_window = WebviewWindowBuilder::new(
+                app,
+                TICKER_WINDOW_LABEL,
+                WebviewUrl::App("index.html?view=ticker".into()),
+            )
+            .title("Little V Ticker")
+            .inner_size(300.0, 25.0)
+            .resizable(false)
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .shadow(false)
+            .visible(false)
+            .build()?;
+            let ticker_app = app_handle.clone();
+            ticker_window.on_window_event(move |event| {
+                if let WindowEvent::Moved(PhysicalPosition { x, y }) = event {
+                    if let Err(error) = ticker_app.emit(
+                        TICKER_POSITION_CHANGED_EVENT,
+                        TickerPosition { x: *x, y: *y },
+                    ) {
+                        eprintln!("Could not notify ticker position: {error}");
+                    }
+                }
+            });
+            if let Some(main_window) = app.get_webview_window("main") {
+                let quit_app = app_handle.clone();
+                main_window.on_window_event(move |event| {
+                    // The ticker window is only hidden while the app runs, so closing
+                    // the main window would otherwise leave the process (and the
+                    // floating ticker) running with no way to reopen the main window.
+                    if let WindowEvent::CloseRequested { .. } = event {
+                        quit_app.exit(0);
+                    }
+                });
+            }
             let root = default_storage_root(&app_handle)
                 .and_then(|root| {
                     ensure_storage_root(&root)?;
@@ -1355,6 +1677,7 @@ pub fn run() {
                 }),
                 watcher_generation,
             });
+            app.manage(QuoteCacheState(Mutex::new(HashMap::new())));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1366,7 +1689,17 @@ pub fn run() {
             delete_transaction,
             update_transaction,
             merge_transactions,
-            split_transaction
+            split_transaction,
+            load_ticker_stocks,
+            save_ticker_stocks,
+            set_ticker_visibility,
+            toggle_ticker_visibility,
+            set_ticker_position,
+            start_ticker_dragging,
+            resize_ticker_window,
+            set_ticker_opacity,
+            get_cached_stock_quotes,
+            cache_stock_quotes
         ])
         .run(tauri::generate_context!())
         .expect("error while running Tauri application");

@@ -10,6 +10,8 @@ button:hover { background: #e6e6e6; }
 .menu-bar nav { display: flex; gap: 6px; }
 .menu-bar button { color: #212121; background: transparent; border: 1px solid transparent; border-radius: 2px; }
 .menu-bar button:hover { background: #e6e6e6; }
+.menu-bar .ticker-toggle { margin-left: auto; font-size: 18px; }
+.menu-bar .ticker-toggle.active { color: #185abd; border-color: #185abd; background: #e7f1ff; }
 .filter-bar { flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: #f3f3f3; border-bottom: 1px solid #c0c0c0; }
 .filter-bar span { margin-left: auto; color: #4d4d4d; font-size: 14px; }
 .status-bar { flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 0 16px; height: 28px; color: #4d4d4d; background: #f3f3f3; border-top: 1px solid #c0c0c0; }
@@ -137,12 +139,18 @@ td.price-alert-loss { color: #107c10; font-weight: 700; }
 .dialog label textarea { font-weight: 400; color: #212121; resize: vertical; min-height: 84px; }
 .two-columns { display: flex; gap: 10px; }
 .two-columns > label { width: 50%; }
-.settings-group { margin: 0; padding: 12px 12px; border: 1px solid #c0c0c0; border-radius: 4px; }
-.settings-group > legend { padding: 0 6px; color: #185abd; font-weight: 700; font-size: 14px; }
-.settings-grid { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 10px 14px; }
+.settings-dialog { width: min(560px, calc(100vw - 32px)); }
+.settings-tabs { display: flex; gap: 4px; border-bottom: 1px solid #c0c0c0; }
+.settings-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 14px; color: #424242; font-weight: 700; font-size: 14px; background: transparent; }
+.settings-tabs button:hover { background: #f3f3f3; }
+.settings-tabs button.active { color: #185abd; border-bottom-color: #185abd; }
+.settings-grid { display: grid; grid-template-columns: max-content 1fr; align-items: center; align-content: start; gap: 10px 14px; min-height: calc(4 * 32px + 3 * 10px); }
 .settings-grid label, .settings-grid > label { font-weight: 700; font-size: 14px; color: #212121; }
 .data-directory-input { display: flex; min-width: 0; gap: 8px; }
 .data-directory-input input { min-width: 0; flex: 1; }
+.ticker-opacity-input { display: flex; align-items: center; min-width: 0; gap: 8px; }
+.ticker-opacity-input input { min-width: 0; flex: 1; }
+.ticker-opacity-input span { flex: 0 0 auto; min-width: 36px; text-align: right; }
 .stock-combobox { position: relative; display: flex; min-width: 0; }
 .stock-combobox input { padding-right: 40px; }
 .stock-combobox.has-current-quote input { padding-right: 160px; }
