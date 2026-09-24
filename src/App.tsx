@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FormEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -22,8 +22,20 @@ import { DEFAULT_REFRESH_SECONDS, MIN_REFRESH_SECONDS, PriceFeedProvider, usePri
 import { ProfitSettingsProvider, useProfitSettings } from "./ProfitSettingsProvider";
 import {
   DEFAULT_TICKER_OPACITY,
+  DEFAULT_TICKER_FONT_COLOR,
+  DEFAULT_TICKER_FONT_SIZE,
+  isTickerFontColor,
+  isTickerFontSize,
+  MAX_TICKER_FONT_SIZE,
+  MIN_TICKER_FONT_SIZE,
+  readStoredTickerFontColor,
+  readStoredTickerFontSize,
   readStoredTickerOpacity,
   TickerSettingsDialog,
+  TICKER_FONT_COLOR_CHANGED_EVENT,
+  TICKER_FONT_COLOR_STORAGE_KEY,
+  TICKER_FONT_SIZE_CHANGED_EVENT,
+  TICKER_FONT_SIZE_STORAGE_KEY,
   TICKER_OPACITY_STORAGE_KEY,
 } from "./Ticker";
 import "./App.css";
@@ -654,6 +666,8 @@ interface SettingsDraft {
   dataDirectory: string;
   languagePreference: string;
   refreshIntervalSeconds: string;
+  tickerFontColor: string;
+  tickerFontSize: string;
   tickerOpacityPercent: string;
   feeRatePercent: string;
   minFee: string;
@@ -666,6 +680,8 @@ function draftFromSettings(
   dataDirectory: string,
   languagePreference: string,
   refreshIntervalSeconds: number,
+  tickerFontColor: string,
+  tickerFontSize: number,
   tickerOpacityPercent: number,
   profitSettings: ProfitSettings,
   priceAlertSettings: PriceAlertSettings,
@@ -674,6 +690,8 @@ function draftFromSettings(
     dataDirectory,
     languagePreference,
     refreshIntervalSeconds: String(refreshIntervalSeconds),
+    tickerFontColor,
+    tickerFontSize: String(tickerFontSize),
     tickerOpacityPercent: String(tickerOpacityPercent),
     feeRatePercent: String(profitSettings.feeRate * 100),
     minFee: String(profitSettings.minFee),
@@ -724,7 +742,7 @@ function AppContent() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [dataDirectory, setDataDirectory] = useState("");
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() =>
-    draftFromSettings("", languagePreference, refreshIntervalSeconds, readStoredTickerOpacity(), profitSettings, priceAlertSettings),
+    draftFromSettings("", languagePreference, refreshIntervalSeconds, readStoredTickerFontColor(), readStoredTickerFontSize(), readStoredTickerOpacity(), profitSettings, priceAlertSettings),
   );
   const [settingsError, setSettingsError] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
@@ -753,9 +771,21 @@ function AppContent() {
   function openSettings() {
     clearLanguagePreview();
     setSettingsError("");
-    setSettingsDraft(draftFromSettings(dataDirectory, languagePreference, refreshIntervalSeconds, readStoredTickerOpacity(), profitSettings, priceAlertSettings));
+    setSettingsDraft(draftFromSettings(dataDirectory, languagePreference, refreshIntervalSeconds, readStoredTickerFontColor(), readStoredTickerFontSize(), readStoredTickerOpacity(), profitSettings, priceAlertSettings));
     setSettingsTab("general");
     setSettingsOpen(true);
+  }
+
+  function previewTickerFontColor(color: string) {
+    if (isTickerFontColor(color)) {
+      void emit(TICKER_FONT_COLOR_CHANGED_EVENT, color);
+    }
+  }
+
+  function previewTickerFontSize(size: number) {
+    if (isTickerFontSize(size)) {
+      void emit(TICKER_FONT_SIZE_CHANGED_EVENT, size);
+    }
   }
 
   function previewTickerOpacity(percent: number) {
@@ -769,6 +799,8 @@ function AppContent() {
         defaultDataDirectory,
         "system",
         DEFAULT_REFRESH_SECONDS,
+        DEFAULT_TICKER_FONT_COLOR,
+        DEFAULT_TICKER_FONT_SIZE,
         DEFAULT_TICKER_OPACITY,
         DEFAULT_PROFIT_SETTINGS,
         { gainPercent: DEFAULT_PRICE_ALERT_PERCENT, lossPercent: DEFAULT_PRICE_ALERT_PERCENT },
@@ -778,11 +810,15 @@ function AppContent() {
       setSettingsError(String(error));
     }
     previewLanguagePreference("system");
+    previewTickerFontColor(DEFAULT_TICKER_FONT_COLOR);
+    previewTickerFontSize(DEFAULT_TICKER_FONT_SIZE);
     previewTickerOpacity(DEFAULT_TICKER_OPACITY);
   }
 
   function dismissSettings() {
     clearLanguagePreview();
+    previewTickerFontColor(readStoredTickerFontColor());
+    previewTickerFontSize(readStoredTickerFontSize());
     previewTickerOpacity(readStoredTickerOpacity());
     setSettingsError("");
     setSettingsOpen(false);
@@ -790,6 +826,7 @@ function AppContent() {
 
   async function saveSettings() {
     const refreshSeconds = Number(settingsDraft.refreshIntervalSeconds);
+    const tickerFontSize = Number(settingsDraft.tickerFontSize);
     const tickerOpacityPercent = Number(settingsDraft.tickerOpacityPercent);
     const feeRatePercent = Number(settingsDraft.feeRatePercent);
     const minFee = Number(settingsDraft.minFee);
@@ -801,6 +838,8 @@ function AppContent() {
       !settingsDraft.dataDirectory.trim() ||
       !Number.isFinite(refreshSeconds) ||
       refreshSeconds < MIN_REFRESH_SECONDS ||
+      !isTickerFontColor(settingsDraft.tickerFontColor) ||
+      !isTickerFontSize(tickerFontSize) ||
       !Number.isFinite(tickerOpacityPercent) ||
       tickerOpacityPercent < 10 ||
       tickerOpacityPercent > 100 ||
@@ -820,6 +859,10 @@ function AppContent() {
       setDataDirectory(selectedDirectory);
       setLanguagePreference(settingsDraft.languagePreference as LanguagePreference);
       setRefreshIntervalSeconds(Math.round(refreshSeconds));
+      window.localStorage.setItem(TICKER_FONT_COLOR_STORAGE_KEY, settingsDraft.tickerFontColor);
+      await emit(TICKER_FONT_COLOR_CHANGED_EVENT, settingsDraft.tickerFontColor);
+      window.localStorage.setItem(TICKER_FONT_SIZE_STORAGE_KEY, String(tickerFontSize));
+      await emit(TICKER_FONT_SIZE_CHANGED_EVENT, tickerFontSize);
       const roundedTickerOpacity = Math.round(tickerOpacityPercent);
       window.localStorage.setItem(TICKER_OPACITY_STORAGE_KEY, String(roundedTickerOpacity));
       await invoke("set_ticker_opacity", { opacity: roundedTickerOpacity });
@@ -1434,6 +1477,39 @@ function AppContent() {
                     setSettingsDraft((draft) => ({ ...draft, refreshIntervalSeconds: event.target.value }))
                   }
                 />
+                <label htmlFor="settings-ticker-font-size">{t("ticker.fontSize")}</label>
+                <input
+                  id="settings-ticker-font-size"
+                  className="ticker-font-size-input"
+                  type="number"
+                  min={MIN_TICKER_FONT_SIZE}
+                  max={MAX_TICKER_FONT_SIZE}
+                  step={1}
+                  aria-label={t("ticker.fontSize")}
+                  value={settingsDraft.tickerFontSize}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setSettingsDraft((draft) => ({ ...draft, tickerFontSize: value }));
+                    const size = Number(value);
+                    if (Number.isFinite(size)) {
+                      previewTickerFontSize(size);
+                    }
+                  }}
+                />
+                <label htmlFor="settings-ticker-font-color">{t("ticker.fontColor")}</label>
+                <div className="ticker-color-input">
+                  <input
+                    id="settings-ticker-font-color"
+                    type="color"
+                    aria-label={t("ticker.fontColor")}
+                    value={settingsDraft.tickerFontColor}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setSettingsDraft((draft) => ({ ...draft, tickerFontColor: value }));
+                      previewTickerFontColor(value);
+                    }}
+                  />
+                </div>
                 <label htmlFor="settings-ticker-opacity">{t("ticker.opacity")}</label>
                 <div className="ticker-opacity-input">
                   <input

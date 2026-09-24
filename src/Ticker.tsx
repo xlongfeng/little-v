@@ -26,10 +26,17 @@ const TICKER_POSITION_STORAGE_KEY = "littlev-ticker-position";
 export const TICKER_OPACITY_CHANGED_EVENT = "ticker-opacity-changed";
 export const TICKER_OPACITY_STORAGE_KEY = "littlev-ticker-opacity";
 export const DEFAULT_TICKER_OPACITY = 100;
-const TICKER_WIDTH = 240;
-const TICKER_ROW_HEIGHT = 22;
+export const TICKER_FONT_COLOR_CHANGED_EVENT = "ticker-font-color-changed";
+export const TICKER_FONT_COLOR_STORAGE_KEY = "littlev-ticker-font-color";
+export const DEFAULT_TICKER_FONT_COLOR = "#212121";
+export const TICKER_FONT_SIZE_CHANGED_EVENT = "ticker-font-size-changed";
+export const TICKER_FONT_SIZE_STORAGE_KEY = "littlev-ticker-font-size";
+export const DEFAULT_TICKER_FONT_SIZE = 14;
+export const MIN_TICKER_FONT_SIZE = 10;
+export const MAX_TICKER_FONT_SIZE = 16;
 const DOUBLE_CLICK_INTERVAL_MS = 500;
 const DOUBLE_CLICK_DISTANCE_PX = 5;
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
 function formatPercent(percent: number): string {
   return `${percent > 0 ? "+" : ""}${(percent * 100).toFixed(2)}%`;
@@ -57,11 +64,32 @@ export function readStoredTickerOpacity(): number {
   return Number.isFinite(stored) && stored >= 10 && stored <= 100 ? stored : DEFAULT_TICKER_OPACITY;
 }
 
+export function isTickerFontColor(value: string): boolean {
+  return HEX_COLOR_PATTERN.test(value);
+}
+
+export function readStoredTickerFontColor(): string {
+  const stored = window.localStorage.getItem(TICKER_FONT_COLOR_STORAGE_KEY);
+  return stored != null && isTickerFontColor(stored) ? stored : DEFAULT_TICKER_FONT_COLOR;
+}
+
+export function isTickerFontSize(value: number): boolean {
+  return Number.isInteger(value) && value >= MIN_TICKER_FONT_SIZE && value <= MAX_TICKER_FONT_SIZE;
+}
+
+export function readStoredTickerFontSize(): number {
+  const stored = Number(window.localStorage.getItem(TICKER_FONT_SIZE_STORAGE_KEY));
+  return isTickerFontSize(stored) ? stored : DEFAULT_TICKER_FONT_SIZE;
+}
+
 function TickerOverlayContent() {
   const { t } = useLanguage();
   const { quotes, setCodes } = usePriceFeed();
   const [stocks, setStocks] = useState<TickerStock[]>([]);
   const [opacity, setOpacity] = useState(DEFAULT_TICKER_OPACITY);
+  const [fontColor, setFontColor] = useState(DEFAULT_TICKER_FONT_COLOR);
+  const [fontSize, setFontSize] = useState(DEFAULT_TICKER_FONT_SIZE);
+  const overlayRef = useRef<HTMLElement>(null);
   const lastPointerDownRef = useRef<{ time: number; x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -97,11 +125,15 @@ function TickerOverlayContent() {
     const visible = window.localStorage.getItem(TICKER_VISIBLE_STORAGE_KEY) === "true";
     void invoke("set_ticker_visibility", { visible });
     setOpacity(readStoredTickerOpacity());
+    setFontColor(readStoredTickerFontColor());
+    setFontSize(readStoredTickerFontSize());
 
     let stopStocks: (() => void) | undefined;
     let stopPosition: (() => void) | undefined;
     let stopVisibility: (() => void) | undefined;
     let stopOpacity: (() => void) | undefined;
+    let stopFontColor: (() => void) | undefined;
+    let stopFontSize: (() => void) | undefined;
     void listen(TICKER_STOCKS_CHANGED_EVENT, () => void loadStocks()).then((stop) => {
       stopStocks = stop;
     });
@@ -120,12 +152,28 @@ function TickerOverlayContent() {
     }).then((stop) => {
       stopOpacity = stop;
     });
+    void listen<string>(TICKER_FONT_COLOR_CHANGED_EVENT, (event) => {
+      if (isTickerFontColor(event.payload)) {
+        setFontColor(event.payload);
+      }
+    }).then((stop) => {
+      stopFontColor = stop;
+    });
+    void listen<number>(TICKER_FONT_SIZE_CHANGED_EVENT, (event) => {
+      if (isTickerFontSize(event.payload)) {
+        setFontSize(event.payload);
+      }
+    }).then((stop) => {
+      stopFontSize = stop;
+    });
     return () => {
       cancelled = true;
       stopStocks?.();
       stopPosition?.();
       stopVisibility?.();
       stopOpacity?.();
+      stopFontColor?.();
+      stopFontSize?.();
     };
   }, []);
 
@@ -134,14 +182,35 @@ function TickerOverlayContent() {
   }, [setCodes, stocks]);
 
   useLayoutEffect(() => {
-    const height = stocks.length ? stocks.length * TICKER_ROW_HEIGHT : TICKER_ROW_HEIGHT * 2;
-    void invoke("resize_ticker_window", { width: TICKER_WIDTH, height });
-  }, [stocks]);
+    const overlay = overlayRef.current;
+    if (!overlay) {
+      return;
+    }
+    const measuredOverlay = overlay;
+
+    function resizeToContent() {
+      const rect = measuredOverlay.getBoundingClientRect();
+      const width = Math.ceil(rect.width);
+      const height = Math.ceil(rect.height);
+      if (width > 0 && height > 0) {
+        void invoke("resize_ticker_window", { width, height });
+      }
+    }
+
+    resizeToContent();
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(resizeToContent);
+    observer.observe(measuredOverlay);
+    return () => observer.disconnect();
+  }, [fontSize, quotes, stocks]);
 
   return (
     <main
+      ref={overlayRef}
       className="ticker-overlay"
-      style={{ opacity: opacity / 100 }}
+      style={{ color: fontColor, fontSize: `${fontSize}px`, opacity: opacity / 100 }}
       onPointerDown={(event) => {
         if (event.button !== 0) {
           return;

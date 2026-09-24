@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
-const { invoke, listen, open, searchStocks, fetchQuotes } = vi.hoisted(() => ({
+const { emit, invoke, listen, open, searchStocks, fetchQuotes } = vi.hoisted(() => ({
+  emit: vi.fn(),
   invoke: vi.fn(),
   listen: vi.fn(),
   open: vi.fn(),
@@ -13,7 +14,7 @@ const { invoke, listen, open, searchStocks, fetchQuotes } = vi.hoisted(() => ({
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
-vi.mock("@tauri-apps/api/event", () => ({ listen }));
+vi.mock("@tauri-apps/api/event", () => ({ emit, listen }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open }));
 vi.mock("./stockApi", () => ({ searchStocks, fetchQuotes }));
 
@@ -28,6 +29,7 @@ describe("App", () => {
   beforeEach(() => {
     window.localStorage.clear();
     invoke.mockReset();
+    emit.mockReset();
     listen.mockReset();
     open.mockReset();
     searchStocks.mockReset();
@@ -35,6 +37,7 @@ describe("App", () => {
     fetchQuotes.mockResolvedValue({});
     listen.mockResolvedValue(vi.fn());
     open.mockResolvedValue(null);
+    emit.mockResolvedValue(undefined);
     const ledgers = [
       {
         code: "SH600000",
@@ -1256,6 +1259,90 @@ describe("App", () => {
 
     expect(invoke).toHaveBeenCalledWith("set_ticker_opacity", { opacity: 80 });
     expect(window.localStorage.getItem("littlev-ticker-opacity")).toBe("80");
+  });
+
+  it("adjusts and applies the floating ticker font color from Settings", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("littlev-ticker-font-color", "#ff0000");
+    render(<App />);
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("tab", { name: "Ticker" }));
+    const colorInput = screen.getByLabelText("Font color");
+    expect(colorInput).toHaveValue("#ff0000");
+
+    fireEvent.change(colorInput, { target: { value: "#123456" } });
+
+    expect(emit).toHaveBeenCalledWith("ticker-font-color-changed", "#123456");
+    expect(window.localStorage.getItem("littlev-ticker-font-color")).toBe("#ff0000");
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(emit).toHaveBeenCalledWith("ticker-font-color-changed", "#123456"),
+    );
+    expect(window.localStorage.getItem("littlev-ticker-font-color")).toBe("#123456");
+  });
+
+  it("reverts the floating ticker font color preview when Settings is cancelled", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("littlev-ticker-font-color", "#ff0000");
+    render(<App />);
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("tab", { name: "Ticker" }));
+    const colorInput = screen.getByLabelText("Font color");
+    fireEvent.change(colorInput, { target: { value: "#123456" } });
+    expect(emit).toHaveBeenCalledWith("ticker-font-color-changed", "#123456");
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(emit).toHaveBeenCalledWith("ticker-font-color-changed", "#ff0000");
+    expect(window.localStorage.getItem("littlev-ticker-font-color")).toBe("#ff0000");
+  });
+
+  it("adjusts and applies the floating ticker font size from Settings", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("littlev-ticker-font-size", "12");
+    render(<App />);
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("tab", { name: "Ticker" }));
+    const sizeInput = screen.getByLabelText("Font size");
+    expect(sizeInput).toHaveValue(12);
+
+    fireEvent.change(sizeInput, { target: { value: "16" } });
+
+    expect(emit).toHaveBeenCalledWith("ticker-font-size-changed", 16);
+    expect(window.localStorage.getItem("littlev-ticker-font-size")).toBe("12");
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(emit).toHaveBeenCalledWith("ticker-font-size-changed", 16),
+    );
+    expect(window.localStorage.getItem("littlev-ticker-font-size")).toBe("16");
+  });
+
+  it("reverts the floating ticker font size preview when Settings is cancelled", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("littlev-ticker-font-size", "12");
+    render(<App />);
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("tab", { name: "Ticker" }));
+    const sizeInput = screen.getByLabelText("Font size");
+    fireEvent.change(sizeInput, { target: { value: "16" } });
+    expect(emit).toHaveBeenCalledWith("ticker-font-size-changed", 16);
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(emit).toHaveBeenCalledWith("ticker-font-size-changed", 12);
+    expect(window.localStorage.getItem("littlev-ticker-font-size")).toBe("12");
   });
 
   it("reloads ledger data when the backend reports an external stock-file change", async () => {

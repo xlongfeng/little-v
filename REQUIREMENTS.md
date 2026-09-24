@@ -99,7 +99,7 @@ The interface uses a clean, Excel-inspired layout with a light ribbon-style appl
 | **Merge** | Opens the Merge transactions dialog (see §7) |
 | **Split** | Opens the Split transaction dialog (see §8) |
 | **Ticker** | Opens the **Ticker** dialog embedded in the main window (see §9) |
-| **Settings** | A tabbed dialog (Chrome-settings style) with **General** (Language, data folder), **Ticker** (refresh interval and window opacity), **Stock Fee** (stamp duty rate, trade fee rate, minimum trade fee), and **Price Change Alert** (Gain and Loss thresholds) tabs. Only one tab's fields are shown at a time; switching tabs does not discard unsaved edits in other tabs. All changes are staged in the dialog and only take effect after **Save**; the dialog also offers **Default** (resets the in-progress draft to the built-in defaults, without applying it) and **Cancel** (closes the dialog and discards any unsaved changes) |
+| **Settings** | A tabbed dialog (Chrome-settings style) with **General** (Language, data folder), **Ticker** (refresh interval, font color, font size, and window opacity), **Stock Fee** (stamp duty rate, trade fee rate, minimum trade fee), and **Price Change Alert** (Gain and Loss thresholds) tabs. Only one tab's fields are shown at a time; switching tabs does not discard unsaved edits in other tabs. All changes are staged in the dialog and only take effect after **Save**; the dialog also offers **Default** (resets the in-progress draft to the built-in defaults, without applying it) and **Cancel** (closes the dialog and discards any unsaved changes) |
 | **About** | Shows the dialog title **About Little V** followed by the app version (**Version `X.Y.Z`**) in a smaller font, and a short application description |
 
 The menu bar also has a ticker-visibility button at its far right. Clicking it toggles the floating ticker window between visible and hidden.
@@ -126,21 +126,26 @@ When a single stock is selected in the Names filter, the status bar also shows, 
 - A quote that fails to load (e.g. a transient network error) leaves the previously fetched quote in place rather than clearing it or interrupting the polling loop.
 - The latest quotes are held in memory only and are not persisted to disk.
 
-### 6.1.2b Floating ticker window opacity
+### 6.1.2b Floating ticker window appearance
 
+- The **Font size** spinbox and **Font color** picker are separate rows before the opacity slider.
+- **Font size** controls the floating ticker window's text size from `10px` to `16px` in one-pixel steps. The setting defaults to `14px`; the applied value is persisted in browser `localStorage` (`littlev-ticker-font-size`) only after **Save**.
+- Changing the font-size spinbox immediately previews the new text size on the floating ticker window (broadcast live via a `ticker-font-size-changed` event, applied as CSS font size), without persisting the change until **Save**.
+- **Font color** is a color picker controlling the floating ticker window's text color. The setting defaults to `#212121`; the applied value is persisted in browser `localStorage` (`littlev-ticker-font-color`) only after **Save**.
+- Changing the color picker immediately previews the new font color on the floating ticker window (broadcast live via a `ticker-font-color-changed` event, applied as CSS color), the same way the Language dropdown immediately previews a language, without persisting the change until **Save**.
 - **Settings → Ticker → Window opacity (%)** is a slider (range `10`–`100`, step `5`) controlling the floating ticker window's transparency; the current value is shown next to it (e.g. `80%`).
 - Dragging the slider immediately previews the new opacity on the floating ticker window (broadcast live via a `ticker-opacity-changed` event, applied as CSS opacity), the same way the Language dropdown immediately previews a language, without persisting the change until **Save**.
 - The setting defaults to `100` (fully opaque); the applied value is persisted in browser `localStorage` (`littlev-ticker-opacity`) only after **Save**.
-- Closing the dialog with **Cancel** or its close button reverts the floating window back to the previously applied opacity.
-- The floating window applies the currently persisted opacity on startup and updates its live display whenever the setting changes while it is open, without writing preview values back to `localStorage` itself — only **Save** persists a new value.
+- Closing the dialog with **Cancel** or its close button reverts the floating window back to the previously applied font color, font size, and opacity.
+- The floating window applies the currently persisted font color, font size, and opacity on startup and updates its live display whenever any appearance setting changes while it is open, without writing preview values back to `localStorage` itself — only **Save** persists new values.
 
 ### 6.1.3 Settings dialog editing model
 
-- The Settings dialog stages every field (Language, data folder, Refresh interval, floating ticker window opacity, Stock Fee fields, and Price Change Alert fields) in a local draft; opening the dialog initializes the draft from the currently applied values. Language selection and floating ticker window opacity are exceptions in presentation only: each immediately previews the selected value, without applying or persisting it.
-- **Save** validates and applies the entire draft at once (data folder, Language, Refresh interval, floating ticker window opacity, Stock Fee settings, and Price Change Alert settings together). Every applied setting is persisted in browser `localStorage`.
-- **Default** resets only the in-progress draft to the built-in defaults (System Default language, 3-second refresh interval, 100% window opacity, and the default Stock Fee and Price Change Alert values below); it does **not** apply or persist anything until **Save** is subsequently clicked. It does, however, preview the default language and window opacity immediately, matching the same-field preview behavior above.
-- **Cancel** (and the dialog's close button) discards the draft, restores the previously applied language and floating ticker window opacity if either was being previewed, and closes the dialog without applying or persisting any changes; the next time Settings is opened, the draft is rebuilt from the still-current applied values.
-- Save rejects the draft when the data folder is blank or unavailable, the refresh interval is below one second, the window opacity is outside the `10`–`100` range, or a Stock Fee field is not a finite, non-negative number; no draft values are applied in that case.
+- The Settings dialog stages every field (Language, data folder, Refresh interval, floating ticker window font color, font size, and opacity, Stock Fee fields, and Price Change Alert fields) in a local draft; opening the dialog initializes the draft from the currently applied values. Language selection, floating ticker font color, floating ticker font size, and floating ticker window opacity are exceptions in presentation only: each immediately previews the selected value, without applying or persisting it.
+- **Save** validates and applies the entire draft at once (data folder, Language, Refresh interval, floating ticker window font color, font size, and opacity, Stock Fee settings, and Price Change Alert settings together). Every applied setting is persisted in browser `localStorage`.
+- **Default** resets only the in-progress draft to the built-in defaults (System Default language, 3-second refresh interval, `#212121` font color, `14px` font size, 100% window opacity, and the default Stock Fee and Price Change Alert values below); it does **not** apply or persist anything until **Save** is subsequently clicked. It does, however, preview the default language, font color, font size, and window opacity immediately, matching the same-field preview behavior above.
+- **Cancel** (and the dialog's close button) discards the draft, restores the previously applied language and floating ticker window appearance if any preview-only field was being previewed, and closes the dialog without applying or persisting any changes; the next time Settings is opened, the draft is rebuilt from the still-current applied values.
+- Save rejects the draft when the data folder is blank or unavailable, the refresh interval is below one second, the font color is not a `#RRGGBB` hex color, the font size is outside the `10`–`16` pixel range, the window opacity is outside the `10`–`100` range, or a Stock Fee field is not a finite, non-negative number; no draft values are applied in that case.
 
 ### 6.1.4 Storage
 
@@ -263,10 +268,11 @@ Little V includes a lightweight stock ticker consisting of a floating ticker win
 - The window background is transparent outside the rendered stock text area.
 - Pointer-dragging the window surface moves the window. The final desktop position is stored in WebView `localStorage` after dragging and restored on startup.
 - Closing the main window quits Little V entirely, including the floating ticker window (if visible) — there is no way to keep the ticker running once the main window is closed.
-- The ticker displays a compact `240px`-wide grid with three fixed columns in this order: **Name** (`120px`), **Price** (`60px`), and **Percent** (`60px`). Each configured stock occupies one row.
-- Rows have a fixed height of `22px`, cells use compact `0 4px` padding, and there is no gap between grid cells.
+- The ticker displays a compact auto-sized grid with three content-driven columns in this order: **Name**, **Price**, and **Percent**. Each configured stock occupies one row.
+- The floating ticker window measures the rendered grid and resizes the native window to the content bounds instead of relying on fixed widget width, column width, or row height constants.
+- Cells use compact `0 4px` padding, natural line height, and no gap between grid cells.
 - Name cells are right-aligned. Price and Percent cells are centered.
-- Stock text uses normal font weight and no red/green market-change colors by default. Cells have no hover tooltip or hover visual effect.
+- Stock text uses normal font weight, the configured ticker font color (default `#212121`), and the configured ticker font size (default `14px`, selectable from `10px` to `16px`) with no red/green market-change colors by default. Cells have no hover tooltip or hover visual effect.
 - If no stocks are configured, the floating window displays **No stocks configured.**
 
 ### 9.2 Ticker price alarms

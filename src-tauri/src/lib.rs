@@ -911,8 +911,8 @@ fn resize_ticker_window(app: tauri::AppHandle, width: f64, height: f64) -> Resul
         .ok_or_else(|| "Ticker window is unavailable.".to_string())?;
     window
         .set_size(tauri::LogicalSize::new(
-            width.clamp(180.0, 1000.0),
-            height.clamp(25.0, 1200.0),
+            width.clamp(1.0, 1000.0),
+            height.clamp(1.0, 1200.0),
         ))
         .map_err(|error| format!("Could not resize ticker window: {error}"))
 }
@@ -1629,7 +1629,7 @@ pub fn run() {
                 WebviewUrl::App("index.html?view=ticker".into()),
             )
             .title("Little V Ticker")
-            .inner_size(300.0, 25.0)
+            .inner_size(1.0, 1.0)
             .resizable(false)
             .decorations(false)
             .transparent(true)

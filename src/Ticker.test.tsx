@@ -49,7 +49,18 @@ describe("Ticker overlay", () => {
     window.localStorage.clear();
   });
 
-  it("restores hidden visibility by default and renders the fixed three-column grid without gain/loss colors", async () => {
+  it("restores hidden visibility by default and renders the auto-sized three-column grid without gain/loss colors", async () => {
+    const measureSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      bottom: 45,
+      height: 45,
+      left: 0,
+      right: 123,
+      top: 0,
+      width: 123,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
     render(<TickerOverlay />);
 
     expect(await screen.findByText("Example Bank")).toBeInTheDocument();
@@ -59,7 +70,8 @@ describe("Ticker overlay", () => {
     expect(screen.getByText("+4.20%")).not.toHaveClass("price-gain", "price-loss");
     expect(screen.getAllByRole("row")).toHaveLength(2);
     expect(invoke).toHaveBeenCalledWith("set_ticker_visibility", { visible: false });
-    expect(invoke).toHaveBeenCalledWith("resize_ticker_window", { width: 240, height: 44 });
+    expect(invoke).toHaveBeenCalledWith("resize_ticker_window", { width: 123, height: 45 });
+    measureSpy.mockRestore();
   });
 
   it("restores visible state and saved position from localStorage", async () => {
@@ -129,6 +141,46 @@ describe("Ticker overlay", () => {
 
     await waitFor(() => expect(overlay).toHaveStyle({ opacity: "0.3" }));
     expect(window.localStorage.getItem("littlev-ticker-opacity")).toBe("80");
+  });
+
+  it("applies a live font color preview without persisting it to localStorage", async () => {
+    window.localStorage.setItem("littlev-ticker-font-color", "#ff0000");
+    let notifyFontColorChange: ((event: { payload: string }) => void) | undefined;
+    listen.mockImplementation((event, handler) => {
+      if (event === "ticker-font-color-changed") {
+        notifyFontColorChange = handler as (event: { payload: string }) => void;
+      }
+      return Promise.resolve(vi.fn());
+    });
+
+    render(<TickerOverlay />);
+    const overlay = await screen.findByText("Example Bank").then((element) => element.closest(".ticker-overlay")!);
+    expect(overlay).toHaveStyle({ color: "#ff0000" });
+
+    notifyFontColorChange?.({ payload: "#123456" });
+
+    await waitFor(() => expect(overlay).toHaveStyle({ color: "#123456" }));
+    expect(window.localStorage.getItem("littlev-ticker-font-color")).toBe("#ff0000");
+  });
+
+  it("applies a live font size preview without persisting it to localStorage", async () => {
+    window.localStorage.setItem("littlev-ticker-font-size", "12");
+    let notifyFontSizeChange: ((event: { payload: number }) => void) | undefined;
+    listen.mockImplementation((event, handler) => {
+      if (event === "ticker-font-size-changed") {
+        notifyFontSizeChange = handler as (event: { payload: number }) => void;
+      }
+      return Promise.resolve(vi.fn());
+    });
+
+    render(<TickerOverlay />);
+    const overlay = await screen.findByText("Example Bank").then((element) => element.closest(".ticker-overlay")!);
+    expect(overlay).toHaveStyle({ fontSize: "12px" });
+
+    notifyFontSizeChange?.({ payload: 16 });
+
+    await waitFor(() => expect(overlay).toHaveStyle({ fontSize: "16px" }));
+    expect(window.localStorage.getItem("littlev-ticker-font-size")).toBe("12");
   });
 });
 

@@ -1,6 +1,6 @@
 .ticker-page {
   min-width: 0;
-  width: 240px;
+  width: max-content;
   margin: 0;
   overflow: hidden;
   background: transparent !important;
@@ -11,8 +11,8 @@
 }
 
 .ticker-overlay {
-  width: 240px;
-  min-height: 22px;
+  width: max-content;
+  min-width: max-content;
   margin: 0;
   color: #212121;
   background: transparent;
@@ -23,21 +23,20 @@
 
 .ticker-grid {
   display: grid;
-  grid-auto-rows: 22px;
+  grid-template-columns: max-content max-content max-content;
+  grid-auto-rows: auto;
   background: transparent;
 }
 
 .ticker-row {
-  display: grid;
-  grid-template-columns: 120px 60px 60px;
-  height: 22px;
+  display: contents;
 }
 
 .ticker-row > span {
   box-sizing: border-box;
   overflow: hidden;
   padding: 0 4px;
-  line-height: 22px;
+  line-height: 1.45;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -55,11 +54,10 @@
 
 .ticker-empty {
   box-sizing: border-box;
-  min-height: 44px;
   margin: 0;
   padding: 8px;
   text-align: center;
-  color: #616161;
+  color: inherit;
   background: transparent;
 }
 

@@ -150,6 +150,8 @@ const en: Dictionary = {
   "ticker.noResults": "No matching stocks found.",
   "ticker.searchError": "Stock search is unavailable: {error}",
   "ticker.saveError": "Could not save ticker settings: {error}",
+  "ticker.fontColor": "Font color",
+  "ticker.fontSize": "Font size",
   "ticker.opacity": "Window opacity (%)",
 };
 
@@ -297,6 +299,8 @@ const zh_cn: Dictionary = {
   "ticker.noResults": "未找到匹配的股票。",
   "ticker.searchError": "股票搜索不可用：{error}",
   "ticker.saveError": "无法保存行情设置：{error}",
+  "ticker.fontColor": "字体颜色",
+  "ticker.fontSize": "字体大小",
   "ticker.opacity": "窗口不透明度（%）",
 };
 

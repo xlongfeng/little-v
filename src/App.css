@@ -148,6 +148,9 @@ td.price-alert-loss { color: #107c10; font-weight: 700; }
 .settings-grid label, .settings-grid > label { font-weight: 700; font-size: 14px; color: #212121; }
 .data-directory-input { display: flex; min-width: 0; gap: 8px; }
 .data-directory-input input { min-width: 0; flex: 1; }
+.ticker-font-size-input { min-width: 0; width: 100%; }
+.ticker-color-input { display: flex; align-items: center; min-width: 0; }
+.ticker-color-input input[type="color"] { width: 44px; min-width: 44px; padding: 2px; }
 .ticker-opacity-input { display: flex; align-items: center; min-width: 0; gap: 8px; }
 .ticker-opacity-input input { min-width: 0; flex: 1; }
 .ticker-opacity-input span { flex: 0 0 auto; min-width: 36px; text-align: right; }
