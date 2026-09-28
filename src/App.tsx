@@ -731,6 +731,7 @@ function AppContent() {
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<TableRow | null>(null);
+  const [duplicatingRow, setDuplicatingRow] = useState<TableRow | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
   const [tickerVisible, setTickerVisible] = useState(
@@ -1237,6 +1238,15 @@ function AppContent() {
                 <td className="row-actions">
                   <button
                     type="button"
+                    className="icon-button duplicate-row"
+                    aria-label={t("table.duplicateTransaction")}
+                    title={t("table.duplicateTransaction")}
+                    onClick={() => setDuplicatingRow(row)}
+                  >
+                    ⧉
+                  </button>
+                  <button
+                    type="button"
                     className="icon-button delete-row"
                     aria-label={t("table.deleteTransaction")}
                     title={t("table.deleteTransaction")}
@@ -1308,6 +1318,17 @@ function AppContent() {
           onClose={() => setEditingRow(null)}
           onCreated={() => {
             setEditingRow(null);
+            void loadLedgers();
+          }}
+        />
+      )}
+      {duplicatingRow && (
+        <TransactionDialog
+          ledgers={ledgers}
+          duplicating={duplicatingRow}
+          onClose={() => setDuplicatingRow(null)}
+          onCreated={() => {
+            setDuplicatingRow(null);
             void loadLedgers();
           }}
         />
@@ -1615,18 +1636,29 @@ function AppContent() {
 function TransactionDialog({
   ledgers,
   editing,
+  duplicating,
   onClose,
   onCreated,
 }: {
   ledgers: StockLedger[];
   editing?: TableRow;
+  duplicating?: TableRow;
   onClose: () => void;
   onCreated: () => void;
 }) {
   const { t } = useLanguage();
   const { quotes } = usePriceFeed();
-  const [form, setForm] = useState(() => (editing ? formFromRow(editing) : initialForm()));
-  const [stockQuery, setStockQuery] = useState(() => (editing ? `${editing.name} (${displayStockCode(editing.code)})` : ""));
+  const source = editing ?? duplicating;
+  const [form, setForm] = useState(() => {
+    if (editing) {
+      return formFromRow(editing);
+    }
+    if (duplicating) {
+      return { ...formFromRow(duplicating), buyDate: "", sellDate: "" };
+    }
+    return initialForm();
+  });
+  const [stockQuery, setStockQuery] = useState(() => (source ? `${source.name} (${displayStockCode(source.code)})` : ""));
   const [searchResults, setSearchResults] = useState<StockOption[] | null>(null);
   const [stockListOpen, setStockListOpen] = useState(false);
   const [searchError, setSearchError] = useState("");
@@ -1767,12 +1799,12 @@ function TransactionDialog({
           <div className={`stock-combobox${selectedQuote ? " has-current-quote" : ""}`} ref={stockComboboxRef}>
             <input
               value={stockQuery}
-              disabled={!!editing}
+              disabled={!!source}
               onChange={(event) => {
                 setStockQuery(event.target.value);
                 setForm({ ...form, stock: null });
               }}
-              onFocus={() => !editing && setStockListOpen(true)}
+              onFocus={() => !source && setStockListOpen(true)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
@@ -1791,7 +1823,7 @@ function TransactionDialog({
                 {selectedQuote.now.toFixed(pricePrecision(form.stock!.code))} / {formatQuotePercent(selectedQuote)}
               </output>
             )}
-            {!editing && (
+            {!source && (
               <button
                 type="button"
                 className="combobox-toggle"
@@ -1805,7 +1837,7 @@ function TransactionDialog({
                 ▾
               </button>
             )}
-            {!editing && stockListOpen && (
+            {!source && stockListOpen && (
               <ul id="stock-options" className="stock-options" role="listbox">
                 {choices.map((stock) => (
                   <li key={stock.code} role="option" aria-selected={form.stock?.code === stock.code}>

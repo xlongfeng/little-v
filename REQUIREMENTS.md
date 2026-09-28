@@ -19,7 +19,7 @@
 | Storage | Local JSON stock ledgers in a configurable user folder; application preferences and the selected folder are kept in browser `localStorage` |
 | Transactions | Create and delete buy and sell transactions |
 | Stock selection | A unified combobox for existing stocks and search through [`stock-api`](https://github.com/zhangxiangliang/stock-api) |
-| Ledger behavior | Transactions can be created, edited (double-click a row), and deleted (via a delete icon at the end of each row) |
+| Ledger behavior | Transactions can be created, duplicated (via a duplicate icon at the end of each row), edited (double-click a row), and deleted (via a delete icon at the end of each row) |
 | Lot shape | Each transaction directly carries its own optional buy price/date and sell price/date |
 | Stock ticker | A configurable always-on-top floating window showing an ordered stock watchlist, current prices, percentage changes, and optional price alarms |
 
@@ -85,7 +85,7 @@ The stock `name` and `code` are stored once per file, not repeated on each trans
 - Quantity, when provided, must be a finite positive whole number that is a multiple of 100.
 - Each price, when present, must be a finite positive value; each date, when present, must use `YYYY-MM-DD` and requires the price on the same side. A transaction must contain a Buy Price, Sell Price, or both.
 - Prices are rounded before being saved: ordinary A-share stocks are stored with 2 decimal places, while ETFs and LOFs are stored with 3 decimal places.
-- Transactions can be edited in place by double-clicking their row, or removed entirely via the trading record table's row **Delete transaction** icon.
+- Transactions can be edited in place by double-clicking their row, duplicated via the row **Duplicate transaction** icon, or removed entirely via the trading record table's row **Delete transaction** icon.
 
 ## 6. User Interface
 
@@ -209,7 +209,7 @@ When a single stock is selected in the Names filter, the status bar also shows, 
 | Sell Price | Sell price, or blank when no sell side is present; shown with 2 decimal places for stocks and 3 decimal places for ETFs/LOFs |
 | Sell Date | Relative date label for the Sell date, or blank when no sell side is present; hovering shows the stored `YYYY-MM-DD` date |
 | Profit | Net profit (see formula below) when quantity, buy price, and sell price are all present, regardless of whether dates are set; blank otherwise |
-| Actions | Header labeled **Actions**; each cell holds the row's **Delete transaction** icon button |
+| Actions | Header labeled **Actions**; each cell holds the row's **Duplicate transaction** and **Delete transaction** icon buttons |
 
 - When a transaction has a note, a small right-aligned comment indicator (message icon) appears in the Name cell; hovering over the indicator shows only the full note text. Transactions without a note show no indicator.
 - Table dates use elapsed ranges: less than one day is **today**; 1–<2, 2–<3, and 3–<7 days are **1 day ago**, **2 days ago**, and **3 days ago**; 1–<2 weeks is **1 week ago** and 2 weeks–<1 month is **2 weeks ago**; 1–<2, 2–<3, 3–<6, and 6–<12 months are **1 month ago**, **2 months ago**, **3 months ago**, and **6 months ago**; and 1–<2 years is **1 year ago**. Dates two or more years old retain their `YYYY-MM-DD` display. Hovering a non-empty date cell always shows its stored `YYYY-MM-DD` date.
@@ -228,7 +228,8 @@ When a single stock is selected in the Names filter, the status bar also shows, 
 - Hovering over a populated Profit cell shows the signed net-profit percentage using the same fees and stamp duty as the Profit calculation: `net_profit / (buy_price × quantity)`. Positive values are red and negative values are green.
 - An empty Buy Date or Sell Date cell has a yellow background when the matching price is present.
 - Double-clicking a row opens an **Edit transaction** dialog (see §10) pre-filled with that row's current values, allowing the quantity, buy/sell price and date fields and note to be changed and saved back to the same transaction.
-- Each row ends with a **Delete transaction** icon button (visible on hover). Clicking it opens a confirmation dialog styled like the Create Transaction dialog, naming the affected stock; confirming permanently removes that transaction from its stock's ledger file and refreshes the table, while Cancel or closing the dialog leaves the transaction untouched. A deletion error is shown inside the confirmation dialog without closing it.
+- Each row ends with a **Duplicate transaction** icon button (visible on hover). Clicking it opens the Create Transaction dialog prefilled with the row's stock, quantity, buy price, sell price, and note, with **Buy date** and **Sell date** left empty; the Stock field is read-only (locked to the source row's stock). Saving creates a new, independent transaction (the source row is unchanged), while Cancel creates nothing.
+- Each row also has a **Delete transaction** icon button (visible on hover). Clicking it opens a confirmation dialog styled like the Create Transaction dialog, naming the affected stock; confirming permanently removes that transaction from its stock's ledger file and refreshes the table, while Cancel or closing the dialog leaves the transaction untouched. A deletion error is shown inside the confirmation dialog without closing it.
 - When no records match, show a clear empty state that directs the user to create a transaction.
 
 ## 7. Merge Transactions Dialog
@@ -372,17 +373,18 @@ Double-clicking a table row reopens the same dialog, titled **Edit transaction**
 6. Closing and reopening the application retains saved transactions from the local JSON ledger files.
 7. Filtering by checked stock names, status, or period updates the visible rows immediately.
 8. A stock-search error is visible in the dialog and does not hide existing local stock choices.
-9. Clicking a row's **Delete transaction** icon opens a confirmation dialog; confirming removes that transaction from the ledger file and from the table, while Cancel leaves it unchanged. A deletion error is shown inside the dialog without removing other rows.
-10. Double-clicking a row opens an **Edit transaction** dialog pre-filled with its current values and a locked Stock field; saving updates that transaction in place (keeping its UUID and creation timestamp) and refreshes the table, while Cancel leaves the transaction unchanged.
-11. The Merge transactions dialog always shows the transactions table, even before a stock is selected; selecting a stock with no valid open transactions additionally shows an empty-state message below the table.
-12. Checking fewer than two rows keeps the **Merge** button disabled. Checking a row of one side disables the checkboxes of every row on the opposite side, preventing mixed-side selections.
-13. The Merge transactions dialog always shows a merge detail panel below the table (blank before selection); checking two or more valid open rows of the same side instantly fills it in with the computed quantity, weighted-average price, latest date, and combined note; clicking **Merge** replaces the selected transactions with one merged transaction and refreshes the table.
-14. The Split transaction dialog always shows the transactions table and split detail panel, even before a stock is selected; selecting a stock with no valid open transactions additionally shows an empty-state message below the table.
-15. Selecting a transaction to split defaults Transaction 1's quantity to half of the original quantity (rounded to the nearest multiple of 100) and its price to the original price; Transaction 2's quantity and price update automatically to conserve the total value as Transaction 1's quantity or price are edited.
-16. The **Split** button stays disabled until a transaction is selected and both quantities are positive multiples of 100 that add up to the original quantity with a positive Transaction 1 price; clicking **Split** replaces the selected transaction with the two resulting transactions (sharing the original date and note) and refreshes the table.
-17. Little V creates the frameless, transparent, always-on-top ticker window at startup, restores its saved position and visibility, allows the menu-bar ticker button to show or hide it, and hides it when the floating window is double-clicked.
-18. The ticker grid renders configured stocks in saved order as fixed-height `Name | Price | Percent` rows with the specified alignment and compact spacing, no market-change colors or hover effects, and the defined empty-state message when no stocks exist.
-19. A ticker stock's Name cell becomes bold only when a live price is strictly below its valid Lower limit or strictly above its valid Upper limit; empty, invalid, equal, or unavailable-price cases do not activate an alarm.
-20. The **Ticker** menu entry opens an embedded dialog titled **Ticker**, using the same width as the Split dialog and a height up to `560px` within the main-window viewport, where supported stocks can be searched or listed from the transaction ledger through the search field's down arrow and added once, with existing results shown as **Added**.
-21. The Ticker dialog supports editing Lower/Upper limit strings, deleting stocks, and reordering stocks through both Move up/Move down actions and guarded pointer drag behavior.
-22. The ordered ticker list and alarm values persist as JSON Lines in `<data-folder>\ticker.jsonl`, while ticker position and visibility persist separately in WebView `localStorage`.
+9. Clicking a row's **Duplicate transaction** icon opens a prefilled Create Transaction dialog with a read-only Stock field and empty buy and sell dates; saving creates a new transaction and leaves the source row unchanged.
+10. Clicking a row's **Delete transaction** icon opens a confirmation dialog; confirming removes that transaction from the ledger file and from the table, while Cancel leaves it unchanged. A deletion error is shown inside the dialog without removing other rows.
+11. Double-clicking a row opens an **Edit transaction** dialog pre-filled with its current values and a locked Stock field; saving updates that transaction in place (keeping its UUID and creation timestamp) and refreshes the table, while Cancel leaves the transaction unchanged.
+12. The Merge transactions dialog always shows the transactions table, even before a stock is selected; selecting a stock with no valid open transactions additionally shows an empty-state message below the table.
+13. Checking fewer than two rows keeps the **Merge** button disabled. Checking a row of one side disables the checkboxes of every row on the opposite side, preventing mixed-side selections.
+14. The Merge transactions dialog always shows a merge detail panel below the table (blank before selection); checking two or more valid open rows of the same side instantly fills it in with the computed quantity, weighted-average price, latest date, and combined note; clicking **Merge** replaces the selected transactions with one merged transaction and refreshes the table.
+15. The Split transaction dialog always shows the transactions table and split detail panel, even before a stock is selected; selecting a stock with no valid open transactions additionally shows an empty-state message below the table.
+16. Selecting a transaction to split defaults Transaction 1's quantity to half of the original quantity (rounded to the nearest multiple of 100) and its price to the original price; Transaction 2's quantity and price update automatically to conserve the total value as Transaction 1's quantity or price are edited.
+17. The **Split** button stays disabled until a transaction is selected and both quantities are positive multiples of 100 that add up to the original quantity with a positive Transaction 1 price; clicking **Split** replaces the selected transaction with the two resulting transactions (sharing the original date and note) and refreshes the table.
+18. Little V creates the frameless, transparent, always-on-top ticker window at startup, restores its saved position and visibility, allows the menu-bar ticker button to show or hide it, and hides it when the floating window is double-clicked.
+19. The ticker grid renders configured stocks in saved order as fixed-height `Name | Price | Percent` rows with the specified alignment and compact spacing, no market-change colors or hover effects, and the defined empty-state message when no stocks exist.
+20. A ticker stock's Name cell becomes bold only when a live price is strictly below its valid Lower limit or strictly above its valid Upper limit; empty, invalid, equal, or unavailable-price cases do not activate an alarm.
+21. The **Ticker** menu entry opens an embedded dialog titled **Ticker**, using the same width as the Split dialog and a height up to `560px` within the main-window viewport, where supported stocks can be searched or listed from the transaction ledger through the search field's down arrow and added once, with existing results shown as **Added**.
+22. The Ticker dialog supports editing Lower/Upper limit strings, deleting stocks, and reordering stocks through both Move up/Move down actions and guarded pointer drag behavior.
+23. The ordered ticker list and alarm values persist as JSON Lines in `<data-folder>\ticker.jsonl`, while ticker position and visibility persist separately in WebView `localStorage`.

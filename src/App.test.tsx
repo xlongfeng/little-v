@@ -502,6 +502,59 @@ describe("App", () => {
     expect(screen.queryByRole("heading", { name: "Edit transaction" })).not.toBeInTheDocument();
   });
 
+  it("duplicates a transaction into a prefilled create dialog with empty dates", async () => {
+    const user = userEvent.setup();
+    invoke.mockImplementation((command: string) => {
+      if (command === "create_transaction") {
+        return Promise.resolve({});
+      }
+      return Promise.resolve([
+        {
+          code: "SH600000",
+          name: "Example Bank",
+          transactions: [
+            {
+              uuid: "pair",
+              createDate: "1",
+              modifyDate: "1",
+              quantity: 200,
+              buyPrice: 10,
+              buyDate: "2026-09-01",
+              sellPrice: 11,
+              sellDate: "2026-09-03",
+              note: "swing",
+            },
+          ],
+        },
+      ]);
+    });
+    render(<App />);
+    await screen.findByText("Example Bank", { selector: ".stock-name" });
+
+    await user.click(screen.getByRole("button", { name: "Duplicate transaction" }));
+    expect(screen.getByRole("heading", { name: "Create transaction" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Stock" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Show existing stocks" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Buy date")).toHaveValue("");
+    expect(screen.getByLabelText("Sell date")).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(invoke).toHaveBeenCalledWith("create_transaction", {
+      request: {
+        name: "Example Bank",
+        code: "SH600000",
+        quantity: 200,
+        buyPrice: 10,
+        buyDate: null,
+        sellPrice: 11,
+        sellDate: null,
+        note: "swing",
+      },
+    });
+    expect(invoke).not.toHaveBeenCalledWith("update_transaction", expect.anything());
+    expect(screen.queryByRole("heading", { name: "Create transaction" })).not.toBeInTheDocument();
+  });
+
   it("does not call update_transaction when the edit dialog is cancelled", async () => {
     const user = userEvent.setup();
     render(<App />);
