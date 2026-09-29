@@ -392,19 +392,19 @@ describe("App", () => {
     };
     const dates = [
       [today, "today"],
-      [daysAgo(1), "1 day ago"],
-      [daysAgo(2), "2 days ago"],
-      [daysAgo(3), "3 days ago"],
-      [daysAgo(6), "3 days ago"],
-      [daysAgo(7), "1 week ago"],
-      [daysAgo(13), "1 week ago"],
-      [daysAgo(14), "2 weeks ago"],
-      [daysAgo(20), "2 weeks ago"],
-      [monthsAgo(1), "1 month ago"],
-      [monthsAgo(2), "2 months ago"],
-      [monthsAgo(3), "3 months ago"],
-      [monthsAgo(6), "6 months ago"],
-      [monthsAgo(12), "1 year ago"],
+      [daysAgo(1), "1 day"],
+      [daysAgo(2), "2 days"],
+      [daysAgo(3), "3 days"],
+      [daysAgo(6), "3 days"],
+      [daysAgo(7), "1 week"],
+      [daysAgo(13), "1 week"],
+      [daysAgo(14), "2 weeks"],
+      [daysAgo(20), "2 weeks"],
+      [monthsAgo(1), "1 month"],
+      [monthsAgo(2), "2 months"],
+      [monthsAgo(3), "3 months"],
+      [monthsAgo(6), "6 months"],
+      [monthsAgo(12), "1 year"],
     ] as const;
     const oneYearDate = dateText(monthsAgo(13));
     const olderDate = dateText(monthsAgo(25));
@@ -429,7 +429,7 @@ describe("App", () => {
       expect(cell).toHaveTextContent(label);
       expect(cell).toHaveClass("table-date");
     }
-    expect(screen.getByTitle(oneYearDate)).toHaveTextContent("1 year ago");
+    expect(screen.getByTitle(oneYearDate)).toHaveTextContent("1 year");
     expect(screen.getByTitle(olderDate)).toHaveTextContent(olderDate);
   });
 
