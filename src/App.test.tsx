@@ -1071,7 +1071,7 @@ describe("App", () => {
     expect(closedRow).toHaveClass("closed-row");
   });
 
-  it("shows the calculated net profit for closed transactions and blank for open ones", async () => {
+  it("shows calculated net profit when both prices are present", async () => {
     invoke.mockResolvedValue([
       {
         code: "SH600000",
@@ -1123,12 +1123,14 @@ describe("App", () => {
 
     // buyFee = 5*50*0.00025 = 0.0625 -> min fee 5; sellFee = 6*50*0.00025 = 0.075 -> min fee 5
     // stampFee = 6*50*0.0005 = 0.15; gross = (6-5)*50 = 50; net = 50 - 5 - 5 - 0.15 = 39.85
-    const profitCells = await screen.findAllByText("39.85");
-    expect(profitCells).toHaveLength(2);
+    expect(await screen.findAllByText("39.85")).toHaveLength(3);
 
     const openRow = screen.getByText("Example Bank", { selector: ".stock-name" }).closest("tr") as HTMLElement;
     const cells = within(openRow).getAllByRole("cell");
     expect(cells[6]).toHaveTextContent("");
+
+    const undatedRow = screen.getByText("Third Bank", { selector: ".stock-name" }).closest("tr") as HTMLElement;
+    expect(within(undatedRow).getAllByRole("cell")[6]).toHaveTextContent("39.85");
   });
 
   it("shows the net profit percentage when hovering over Profit", async () => {
@@ -1195,11 +1197,11 @@ describe("App", () => {
     render(<App />);
     expect(await screen.findByText("Second Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
-    // Each row nets 39.85, so the total across both visible rows is 79.70.
+    // Only the fully closed row contributes to the total; the undated row still shows row profit.
     const filterBar = document.querySelector(".filter-bar") as HTMLElement;
     expect(filterBar).toHaveTextContent("2 records");
     const statusBar = document.querySelector(".status-bar") as HTMLElement;
-    expect(within(statusBar).getByTitle("Total profit")).toHaveTextContent("79.70");
+    expect(within(statusBar).getByTitle("Total profit")).toHaveTextContent("39.85");
   });
 
   it("recomputes the Profit column and total after saving Stock Fee settings", async () => {

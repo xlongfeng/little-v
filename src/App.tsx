@@ -65,7 +65,15 @@ function mostRecentDate(row: { buyDate?: string; sellDate?: string }): string | 
   return row.buyDate ?? row.sellDate;
 }
 
-function isRowClosed(row: { quantity?: number | null; buyPrice?: number | null; buyDate?: string | null; sellPrice?: number | null; sellDate?: string | null }): boolean {
+function isRowClosed(
+  row: TableRow,
+): row is TableRow & {
+  quantity: number;
+  buyPrice: number;
+  buyDate: string;
+  sellPrice: number;
+  sellDate: string;
+} {
   return (
     row.quantity != null &&
     row.buyPrice != null &&
@@ -88,7 +96,10 @@ function formatNetProfit(row: TableRow, settings: ProfitSettings): string {
 }
 
 function formatTotalProfit(rows: TableRow[], settings: ProfitSettings): string {
-  const total = rows.reduce((sum, row) => sum + (netProfitFor(row, settings) ?? 0), 0);
+  const total = rows.reduce(
+    (sum, row) => sum + (isRowClosed(row) ? (netProfitFor(row, settings) ?? 0) : 0),
+    0,
+  );
   return total.toFixed(2);
 }
 
