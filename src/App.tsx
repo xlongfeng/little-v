@@ -41,29 +41,38 @@ import {
 import "./App.css";
 
 type StatusFilter = "all" | "alerted" | "open" | "closed";
-type PeriodFilter = "all" | "1w" | "1m" | "3m" | "6m" | "1y" | "2y";
+type PeriodFilter = "all" | "1w" | "1m" | "3m" | "6m" | "1y" | "2y" | "1yAgo" | "2yAgo";
 
-const PERIOD_RANGES: Record<Exclude<PeriodFilter, "all">, { unit: "days" | "months"; value: number }> = {
-  "1w": { unit: "days", value: 7 },
-  "1m": { unit: "months", value: 1 },
-  "3m": { unit: "months", value: 3 },
-  "6m": { unit: "months", value: 6 },
-  "1y": { unit: "months", value: 12 },
-  "2y": { unit: "months", value: 24 },
+const PERIOD_RANGES: Record<Exclude<PeriodFilter, "all">, { from?: { unit: "days" | "months"; value: number }; to?: { unit: "months"; value: number } }> = {
+  "1w": { from: { unit: "days", value: 7 } },
+  "1m": { from: { unit: "months", value: 1 } },
+  "3m": { from: { unit: "months", value: 3 } },
+  "6m": { from: { unit: "months", value: 6 } },
+  "1y": { from: { unit: "months", value: 12 } },
+  "2y": { from: { unit: "months", value: 24 } },
+  "1yAgo": { from: { unit: "months", value: 24 }, to: { unit: "months", value: 12 } },
+  "2yAgo": { from: { unit: "months", value: 36 }, to: { unit: "months", value: 24 } },
 };
 
-function periodCutoff(period: PeriodFilter): string | null {
+function dateBefore(range: { unit: "days" | "months"; value: number }): string {
+  const date = new Date();
+  if (range.unit === "days") {
+    date.setDate(date.getDate() - range.value);
+  } else {
+    date.setMonth(date.getMonth() - range.value);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+function periodRange(period: PeriodFilter): { from?: string; to?: string } | null {
   if (period === "all") {
     return null;
   }
-  const cutoff = new Date();
   const range = PERIOD_RANGES[period];
-  if (range.unit === "days") {
-    cutoff.setDate(cutoff.getDate() - range.value);
-  } else {
-    cutoff.setMonth(cutoff.getMonth() - range.value);
-  }
-  return cutoff.toISOString().slice(0, 10);
+  return {
+    from: range.from ? dateBefore(range.from) : undefined,
+    to: range.to ? dateBefore(range.to) : undefined,
+  };
 }
 
 function mostRecentDate(row: { buyDate?: string; sellDate?: string }): string | undefined {
@@ -1049,10 +1058,13 @@ function AppContent() {
     if (statusFilter === "closed" && !isClosed) {
       return false;
     }
-    const cutoff = periodCutoff(periodFilter);
-    if (cutoff) {
+    const range = periodRange(periodFilter);
+    if (range) {
       const recentDate = mostRecentDate(row);
-      if (recentDate && recentDate < cutoff) {
+      if (recentDate && range.from && recentDate < range.from) {
+        return false;
+      }
+      if (recentDate && range.to && recentDate >= range.to) {
         return false;
       }
     }
@@ -1214,6 +1226,8 @@ function AppContent() {
             <option value="6m">{t("filters.period6m")}</option>
             <option value="1y">{t("filters.period1y")}</option>
             <option value="2y">{t("filters.period2y")}</option>
+            <option value="1yAgo">{t("filters.period1yAgo")}</option>
+            <option value="2yAgo">{t("filters.period2yAgo")}</option>
           </select>
         </label>
         <span>{formatRecordCount(language, rows.length)}</span>

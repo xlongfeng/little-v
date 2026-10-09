@@ -1700,6 +1700,34 @@ describe("App", () => {
           },
         ],
       },
+      {
+        code: "SZ000005",
+        name: "One Year Ago Bank",
+        transactions: [
+          {
+            uuid: "one-year-ago-buy",
+            createDate: "6",
+            modifyDate: "6",
+            quantity: 50,
+            buyPrice: 5,
+            buyDate: daysAgo(400),
+          },
+        ],
+      },
+      {
+        code: "SZ000006",
+        name: "Two Years Ago Bank",
+        transactions: [
+          {
+            uuid: "two-years-ago-buy",
+            createDate: "7",
+            modifyDate: "7",
+            quantity: 50,
+            buyPrice: 5,
+            buyDate: daysAgo(800),
+          },
+        ],
+      },
     ]);
     const user = userEvent.setup();
     render(<App />);
@@ -1708,11 +1736,15 @@ describe("App", () => {
     expect(screen.getByText("Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
     expect(screen.getByText("Three Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
     expect(screen.getByText("Six Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("One Year Ago Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Two Years Ago Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
     const periodFilter = screen.getByRole("combobox", { name: "Period" });
     expect(within(periodFilter).getByRole("option", { name: "Last one week" })).toBeInTheDocument();
     expect(within(periodFilter).getByRole("option", { name: "Last one month" })).toBeInTheDocument();
     expect(within(periodFilter).getByRole("option", { name: "Last three months" })).toBeInTheDocument();
+    expect(within(periodFilter).getByRole("option", { name: "One year ago" })).toBeInTheDocument();
+    expect(within(periodFilter).getByRole("option", { name: "Two years ago" })).toBeInTheDocument();
 
     await user.selectOptions(periodFilter, "Last one week");
     expect(screen.queryByText("Old Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
@@ -1720,24 +1752,46 @@ describe("App", () => {
     expect(screen.queryByText("Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
     expect(screen.queryByText("Three Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
     expect(screen.queryByText("Six Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("One Year Ago Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Two Years Ago Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
 
     await user.selectOptions(periodFilter, "Last one month");
     expect(screen.getByText("Week Bank", { selector: ".stock-name" })).toBeInTheDocument();
     expect(screen.getByText("Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
     expect(screen.queryByText("Three Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
     expect(screen.queryByText("Six Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("One Year Ago Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Two Years Ago Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
 
     await user.selectOptions(periodFilter, "Last three months");
     expect(screen.getByText("Week Bank", { selector: ".stock-name" })).toBeInTheDocument();
     expect(screen.getByText("Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
     expect(screen.getByText("Three Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
     expect(screen.queryByText("Six Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("One Year Ago Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Two Years Ago Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
 
     await user.selectOptions(periodFilter, "Last 6 months");
     expect(screen.getByText("Week Bank", { selector: ".stock-name" })).toBeInTheDocument();
     expect(screen.getByText("Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
     expect(screen.getByText("Three Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
     expect(screen.getByText("Six Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.queryByText("One Year Ago Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Two Years Ago Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+
+    await user.selectOptions(periodFilter, "One year ago");
+    expect(screen.queryByText("Week Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Six Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.getByText("One Year Ago Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.queryByText("Two Years Ago Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+
+    await user.selectOptions(periodFilter, "Two years ago");
+    expect(screen.queryByText("Week Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Six Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("One Year Ago Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.getByText("Two Years Ago Bank", { selector: ".stock-name" })).toBeInTheDocument();
   });
 
   it("keeps rows with no buy or sell date visible for any period filter", async () => {
