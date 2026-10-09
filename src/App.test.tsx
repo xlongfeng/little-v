@@ -858,6 +858,63 @@ describe("App", () => {
     expect(screen.queryByText("9.00")).not.toBeInTheDocument();
   });
 
+  it("shows newly alerted rows under Alerted only when live prices change", async () => {
+    const user = userEvent.setup();
+    const listeners: Record<string, (event: { payload: unknown }) => void> = {};
+    listen.mockImplementation((event: string, handler: (event: { payload: unknown }) => void) => {
+      listeners[event] = handler;
+      return Promise.resolve(vi.fn());
+    });
+    invoke.mockImplementation((command: string) => {
+      if (command === "load_stock_ledgers") {
+        return Promise.resolve([
+          {
+            code: "SH600000",
+            name: "Example Bank",
+            transactions: [
+              { uuid: "buy", createDate: "1", modifyDate: "1", quantity: 100, buyPrice: 10, buyDate: "2026-09-01" },
+            ],
+          },
+        ]);
+      }
+      if (command === "load_ticker_stocks") {
+        return Promise.resolve([]);
+      }
+      if (command === "get_cached_stock_quotes") {
+        return Promise.resolve({
+          SH600000: { code: "SH600000", now: 10, yesterday: 10, percent: 0 },
+        });
+      }
+      if (command === "get_data_directory" || command === "get_default_data_directory") {
+        return Promise.resolve("C:\\Users\\Example\\Documents\\Little V");
+      }
+      return Promise.resolve(undefined);
+    });
+    fetchQuotes.mockResolvedValue({
+      SH600000: { code: "SH600000", now: 10, yesterday: 10, percent: 0 },
+    });
+    render(<App />);
+
+    expect(await screen.findByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("10.00").closest("td")).not.toHaveClass("price-alert-loss");
+
+    await user.selectOptions(screen.getByLabelText("Status"), "alerted");
+    await waitFor(() => {
+      expect(screen.queryByText("Example Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    });
+
+    listeners["stock-quotes-updated"]?.({
+      payload: {
+        SH600000: { code: "SH600000", now: 9, yesterday: 10, percent: -0.1 },
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Example Bank", { selector: ".stock-name" })).toBeInTheDocument();
+      expect(screen.getByText("10.00").closest("td")).toHaveClass("price-alert-loss");
+    });
+  });
+
   it("keeps a row's table position stable after editing it, even when the edit changes its sort order", async () => {
     const user = userEvent.setup();
     let ledgerState = [

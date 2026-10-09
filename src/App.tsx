@@ -1019,6 +1019,7 @@ function AppContent() {
     () => priceAlertClasses(allRows, quotes, priceAlertSettings),
     [allRows, quotes, priceAlertSettings],
   );
+  const alertSignature = useMemo(() => [...alerts.keys()].sort().join("|"), [alerts]);
   const stockSummary = useMemo(() => {
     if (selectedStockName === null) {
       return null;
@@ -1118,7 +1119,8 @@ function AppContent() {
         nextVisible = new Set<string>();
         for (const key of nextOrder) {
           if (previouslySeen.has(key)) {
-            if (prev.visible.has(key)) {
+            const row = rowByKey.get(key);
+            if (prev.visible.has(key) || (statusFilter === "alerted" && row && matchesFilters(row))) {
               nextVisible.add(key);
             }
           } else {
@@ -1135,7 +1137,7 @@ function AppContent() {
 
     seenKeysRef.current = currentKeys;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allRows, filterSignature]);
+  }, [allRows, filterSignature, alertSignature]);
 
   const rows = useMemo(() => {
     const rowByKey = new Map(allRows.map((row) => [row.key, row]));
