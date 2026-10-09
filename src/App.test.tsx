@@ -1624,6 +1624,11 @@ describe("App", () => {
   });
 
   it("filters rows by period using the most recent buy or sell date", async () => {
+    const daysAgo = (days: number) => {
+      const date = new Date();
+      date.setDate(date.getDate() - days);
+      return date.toISOString().slice(0, 10);
+    };
     invoke.mockResolvedValue([
       {
         code: "SH600000",
@@ -1640,11 +1645,11 @@ describe("App", () => {
         ],
       },
       {
-        code: "SZ000001",
-        name: "Recent Bank",
+        code: "SZ000002",
+        name: "Week Bank",
         transactions: [
           {
-            uuid: "recent-buy",
+            uuid: "week-buy",
             createDate: "2",
             modifyDate: "2",
             quantity: 50,
@@ -1653,15 +1658,86 @@ describe("App", () => {
           },
         ],
       },
+      {
+        code: "SZ000001",
+        name: "Month Bank",
+        transactions: [
+          {
+            uuid: "month-buy",
+            createDate: "3",
+            modifyDate: "3",
+            quantity: 50,
+            buyPrice: 5,
+            buyDate: daysAgo(14),
+          },
+        ],
+      },
+      {
+        code: "SZ000003",
+        name: "Three Month Bank",
+        transactions: [
+          {
+            uuid: "three-month-buy",
+            createDate: "4",
+            modifyDate: "4",
+            quantity: 50,
+            buyPrice: 5,
+            buyDate: daysAgo(60),
+          },
+        ],
+      },
+      {
+        code: "SZ000004",
+        name: "Six Month Bank",
+        transactions: [
+          {
+            uuid: "six-month-buy",
+            createDate: "5",
+            modifyDate: "5",
+            quantity: 50,
+            buyPrice: 5,
+            buyDate: daysAgo(120),
+          },
+        ],
+      },
     ]);
     const user = userEvent.setup();
     render(<App />);
     expect(await screen.findByText("Old Bank", { selector: ".stock-name" })).toBeInTheDocument();
-    expect(screen.getByText("Recent Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Week Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Three Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Six Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Period" }), "Last 6 months");
+    const periodFilter = screen.getByRole("combobox", { name: "Period" });
+    expect(within(periodFilter).getByRole("option", { name: "Last one week" })).toBeInTheDocument();
+    expect(within(periodFilter).getByRole("option", { name: "Last one month" })).toBeInTheDocument();
+    expect(within(periodFilter).getByRole("option", { name: "Last three months" })).toBeInTheDocument();
+
+    await user.selectOptions(periodFilter, "Last one week");
     expect(screen.queryByText("Old Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
-    expect(screen.getByText("Recent Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Week Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.queryByText("Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Three Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Six Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+
+    await user.selectOptions(periodFilter, "Last one month");
+    expect(screen.getByText("Week Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.queryByText("Three Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Six Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+
+    await user.selectOptions(periodFilter, "Last three months");
+    expect(screen.getByText("Week Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Three Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.queryByText("Six Month Bank", { selector: ".stock-name" })).not.toBeInTheDocument();
+
+    await user.selectOptions(periodFilter, "Last 6 months");
+    expect(screen.getByText("Week Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Three Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
+    expect(screen.getByText("Six Month Bank", { selector: ".stock-name" })).toBeInTheDocument();
   });
 
   it("keeps rows with no buy or sell date visible for any period filter", async () => {

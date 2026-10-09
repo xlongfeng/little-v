@@ -41,12 +41,15 @@ import {
 import "./App.css";
 
 type StatusFilter = "all" | "alerted" | "open" | "closed";
-type PeriodFilter = "all" | "6m" | "1y" | "2y";
+type PeriodFilter = "all" | "1w" | "1m" | "3m" | "6m" | "1y" | "2y";
 
-const PERIOD_MONTHS: Record<Exclude<PeriodFilter, "all">, number> = {
-  "6m": 6,
-  "1y": 12,
-  "2y": 24,
+const PERIOD_RANGES: Record<Exclude<PeriodFilter, "all">, { unit: "days" | "months"; value: number }> = {
+  "1w": { unit: "days", value: 7 },
+  "1m": { unit: "months", value: 1 },
+  "3m": { unit: "months", value: 3 },
+  "6m": { unit: "months", value: 6 },
+  "1y": { unit: "months", value: 12 },
+  "2y": { unit: "months", value: 24 },
 };
 
 function periodCutoff(period: PeriodFilter): string | null {
@@ -54,7 +57,12 @@ function periodCutoff(period: PeriodFilter): string | null {
     return null;
   }
   const cutoff = new Date();
-  cutoff.setMonth(cutoff.getMonth() - PERIOD_MONTHS[period]);
+  const range = PERIOD_RANGES[period];
+  if (range.unit === "days") {
+    cutoff.setDate(cutoff.getDate() - range.value);
+  } else {
+    cutoff.setMonth(cutoff.getMonth() - range.value);
+  }
   return cutoff.toISOString().slice(0, 10);
 }
 
@@ -1200,6 +1208,9 @@ function AppContent() {
           {t("filters.period")}
           <select aria-label={t("filters.period")} value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as PeriodFilter)}>
             <option value="all">{t("filters.all")}</option>
+            <option value="1w">{t("filters.period1w")}</option>
+            <option value="1m">{t("filters.period1m")}</option>
+            <option value="3m">{t("filters.period3m")}</option>
             <option value="6m">{t("filters.period6m")}</option>
             <option value="1y">{t("filters.period1y")}</option>
             <option value="2y">{t("filters.period2y")}</option>
